@@ -29,19 +29,38 @@ fn DecodeAndExecute(self: *SoC, instr: u32) void {
 fn execR(self: *SoC, instr: u32) void {
     const rm = (instr >> 27) & 0b11111; // Rm
     const rn = (instr >> 22) & 0b11111; // Rn
-    const rd = (instr >> 17) & 0b11111; // Rd
+    const rd = (instr >> 10) & 0b11111; // Rd
+    const fn7 = (instr >> 15) & 0b1111111; // fn7
     const fn3 = (instr >> 8) & 0b111; // fn3
-    const opcode = instr & 0b1111111; // opcode
-    //
-    switch (fn3) {
-        0b000 => self.regs[rd] = self.regs[rn] + self.regs[rm], // add
-        0b001 => self.regs[rd] = self.regs[rn] - self.regs[rm], // sub
-        0b010 => self.regs[rd] = self.regs[rn] | self.regs[rm], // or
-        0b011 => self.regs[rd] = self.regs[rn] & self.regs[rm], // and
-        0b100 => self.regs[rd] = self.regs[rn] ^ self.regs[rm], // xor
-        0b101 => self.regs[rd] = self.regs[rn] << self.regs[rm], // lsl
-        0b110 => self.regs[rd] = self.regs[rn] >> self.regs[rm], // lsr
-        else => @panic("Unknown R-type instruction"),
+
+    if (fn7 == 0x0) {
+        switch (fn3) {
+            0x0 => self.regs[rd] = self.regs[rm] + self.regs[rn], // add
+            0x1 => self.regs[rd] = self.regs[rm] | self.regs[rn], // or
+            0x2 => self.regs[rd] = self.regs[rm] & self.regs[rn], // and
+            0x3 => self.regs[rd] = self.regs[rm] ^ self.regs[rn], // xor
+            0x4 => self.regs[rd] = self.regs[rm] << self.regs[rn], // lsl
+            0x5 => self.regs[rd] = self.regs[rm] >> self.regs[rn], // lsr
+            0x6 => {
+                if (self.regs[rm] == self.regs[rn]) {
+                    self.statusreg |= 0x1;
+                } else {
+                    self.statusreg &= 0xFE;
+                }
+
+                if (self.regs[rm] > self.regs[rn]) {
+                    self.statusreg |= 0x2;
+                } else {
+                    self.statusreg &= 0xFD;
+                }
+
+                if (self.regs[rm] < self.regs[rn]) {
+                    self.statusreg |= 0x4;
+                } else {
+                    self.statusreg &= 0xFB;
+                }
+            },
+        }
     }
 }
 
