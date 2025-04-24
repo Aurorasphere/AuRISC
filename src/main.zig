@@ -163,17 +163,17 @@ fn execS(self: *SoC, instr: u32) void {
 
     switch (fn3) {
         0b000 => {
-            self.data_memory[address + 0] = @truncate(u8, value >> 0);
-            self.data_memory[address + 1] = @truncate(u8, value >> 8);
-            self.data_memory[address + 2] = @truncate(u8, value >> 16);
-            self.data_memory[address + 3] = @truncate(u8, value >> 24);
+            self.data_memory[address + 0] = @truncate(value >> 0);
+            self.data_memory[address + 1] = @truncate(value >> 8);
+            self.data_memory[address + 2] = @truncate(value >> 16);
+            self.data_memory[address + 3] = @truncate(value >> 24);
         },
         0b001 => {
-            self.data_memory[address + 0] = @truncate(u8, value >> 0);
-            self.data_memory[address + 1] = @truncate(u8, value >> 8);
+            self.data_memory[address + 0] = @truncate(value >> 0);
+            self.data_memory[address + 1] = @truncate(value >> 8);
         },
         0b011 => {
-            self.data_memory[address] = @truncate(u8, value);
+            self.data_memory[address] = @truncate(value);
         },
         _ => @panic("Error: Invalid fn3 on S-Type Store instruction!\n"),
     }
@@ -186,7 +186,46 @@ fn execCB(self: *SoC, instr: u32) void {
     const offset = (rm + imm) << 2;
 
     switch (fn3) {
-        0b000 => {},
+        0b000 => { // beq
+            if ((self.statusreg & self.FLAG_EQ) != 0) {
+                self.pc += offset;
+            }
+        },
+        0b001 => { // bneq
+            if ((self.statusreg & self.FLAG_EQ) == 0) {
+                self.pc += offset;
+            }
+        },
+        0b010 => { // bgt
+            if ((self.statusreg & self.FLAG_GT) != 0) {
+                self.pc += offset;
+            }
+        },
+        0b011 => { // blt
+            if ((self.statusreg & self.FLAG_LT) != 0) {
+                self.pc += offset;
+            }
+        },
+        0b100 => { // begt
+            if ((self.statusreg & (self.FLAG_GT | self.FLAG_EQ)) != 0) {
+                self.pc += offset;
+            }
+        },
+        0b101 => { // belt
+            if ((self.stautsreg & (self.FLAG_LT | self.FLAG_EQ)) != 0) {
+                self.pc += offset;
+            }
+        },
+        0b110 => {
+            if ((self.statusreg & self.FLAG_C) != 0) {
+                self.pc += offset;
+            }
+        },
+        0b111 => {
+            if ((self.statusreg & self.FLAG_V) != 0) {
+                self.pc += offset;
+            }
+        },
     }
 }
 
