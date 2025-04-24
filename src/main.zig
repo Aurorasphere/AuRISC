@@ -158,6 +158,38 @@ fn execS(self: *SoC, instr: u32) void {
     const rn = (instr >> 22) & 0b11111;
     const imm = (instr >> 10) & 0b1111_1111_1111;
     const fn3 = (instr >> 7) & 0b111;
+    const address = imm + rm;
+    const value = self.regs[rn];
+
+    switch (fn3) {
+        0b000 => {
+            self.data_memory[address + 0] = @truncate(u8, value >> 0);
+            self.data_memory[address + 1] = @truncate(u8, value >> 8);
+            self.data_memory[address + 2] = @truncate(u8, value >> 16);
+            self.data_memory[address + 3] = @truncate(u8, value >> 24);
+        },
+        0b001 => {
+            self.data_memory[address + 0] = @truncate(u8, value >> 0);
+            self.data_memory[address + 1] = @truncate(u8, value >> 8);
+        },
+        0b011 => {
+            self.data_memory[address] = @truncate(u8, value);
+        },
+        _ => @panic("Error: Invalid fn3 on S-Type Store instruction!\n"),
+    }
+}
+
+fn execCB(self: *SoC, instr: u32) void {
+    const rm = (instr >> 27) & 0b11111;
+    const imm = (instr >> 10) & 0b1_1111_1111_1111_1111;
+    const fn3 = (instr >> 7) & 0b111;
+    const offset = (rm + imm) << 2;
+
+    switch (fn3) {
+        0b000 => {},
+    }
 }
 
 pub fn main() !void {}
+
+// Jun <3 Jay
