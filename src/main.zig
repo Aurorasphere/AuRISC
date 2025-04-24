@@ -107,11 +107,13 @@ fn fetch(self: *SoC) u32 {
 }
 
 fn decode_and_executeAndExecute(self: *SoC, instr: u32) void {
-    const opcode = instr & 0x0000007F;
+    const opcode = instr & 0b111;
     switch (opcode) {
-        0b0000000 => {
-            self.execR(instr);
-        },
+        0b000 => execR(self, instr),
+        0b001 => execI(self, instr),
+        0b010 => execS(self, instr),
+        0b011 => execCB(self, instr),
+        0b100 => execT(self, instr),
     }
 }
 
@@ -162,17 +164,17 @@ fn execS(self: *SoC, instr: u32) void {
     const value = self.regs[rn];
 
     switch (fn3) {
-        0b000 => {
+        0b000 => { // Store word
             self.data_memory[address + 0] = @truncate(value >> 0);
             self.data_memory[address + 1] = @truncate(value >> 8);
             self.data_memory[address + 2] = @truncate(value >> 16);
             self.data_memory[address + 3] = @truncate(value >> 24);
         },
-        0b001 => {
+        0b001 => { // Store half
             self.data_memory[address + 0] = @truncate(value >> 0);
             self.data_memory[address + 1] = @truncate(value >> 8);
         },
-        0b011 => {
+        0b011 => { // Store byte
             self.data_memory[address] = @truncate(value);
         },
         _ => @panic("Error: Invalid fn3 on S-Type Store instruction!\n"),
@@ -180,54 +182,66 @@ fn execS(self: *SoC, instr: u32) void {
 }
 
 fn execCB(self: *SoC, instr: u32) void {
-    const rm = (instr >> 27) & 0b11111;
+    const rmd = (instr >> 27) & 0b11111;
     const imm = (instr >> 10) & 0b1_1111_1111_1111_1111;
     const fn3 = (instr >> 7) & 0b111;
-    const offset = (rm + imm) << 2;
+    const opcode = instr & 0b1111111;
+    const offset = (rmd + imm) << 2;
 
-    switch (fn3) {
-        0b000 => { // beq
-            if ((self.statusreg & self.FLAG_EQ) != 0) {
-                self.pc += offset;
-            }
-        },
-        0b001 => { // bneq
-            if ((self.statusreg & self.FLAG_EQ) == 0) {
-                self.pc += offset;
-            }
-        },
-        0b010 => { // bgt
-            if ((self.statusreg & self.FLAG_GT) != 0) {
-                self.pc += offset;
-            }
-        },
-        0b011 => { // blt
-            if ((self.statusreg & self.FLAG_LT) != 0) {
-                self.pc += offset;
-            }
-        },
-        0b100 => { // begt
-            if ((self.statusreg & (self.FLAG_GT | self.FLAG_EQ)) != 0) {
-                self.pc += offset;
-            }
-        },
-        0b101 => { // belt
-            if ((self.stautsreg & (self.FLAG_LT | self.FLAG_EQ)) != 0) {
-                self.pc += offset;
-            }
-        },
-        0b110 => {
-            if ((self.statusreg & self.FLAG_C) != 0) {
-                self.pc += offset;
-            }
-        },
-        0b111 => {
-            if ((self.statusreg & self.FLAG_V) != 0) {
-                self.pc += offset;
-            }
-        },
+    if (opcode == 3) {
+        switch (fn3) {
+            0b000 => { // beq
+                if ((self.statusreg & self.FLAG_EQ) != 0) {
+                    self.pc += offset;
+                }
+            },
+            0b001 => { // bneq
+                if ((self.statusreg & self.FLAG_EQ) == 0) {
+                    self.pc += offset;
+                }
+            },
+            0b010 => { // bgt
+                if ((self.statusreg & self.FLAG_GT) != 0) {
+                    self.pc += offset;
+                }
+            },
+            0b011 => { // blt
+                if ((self.statusreg & self.FLAG_LT) != 0) {
+                    self.pc += offset;
+                }
+            },
+            0b100 => { // begt
+                if ((self.statusreg & (self.FLAG_GT | self.FLAG_EQ)) != 0) {
+                    self.pc += offset;
+                }
+            },
+            0b101 => { // belt
+                if ((self.stautsreg & (self.FLAG_LT | self.FLAG_EQ)) != 0) {
+                    self.pc += offset;
+                }
+            },
+            0b110 => {
+                if ((self.statusreg & self.FLAG_C) != 0) {
+                    self.pc += offset;
+                }
+            },
+            0b111 => {
+                if ((self.statusreg & self.FLAG_V) != 0) {
+                    self.pc += offset;
+                }
+            },
+        }
+    } else if (opcode == 11) {
+        switch (fn3) {
+            0b000 => {
+                self.regs[rmd] += self.pc + 4;
+                self.pc += imm << 2;
+            },
+        }
     }
 }
+
+fn execT(self: *SoC, instr: u32) void {}
 
 pub fn main() !void {}
 
