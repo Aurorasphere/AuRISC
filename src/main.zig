@@ -19,9 +19,9 @@ pub const SoC = struct {
 
 fn ALU(self: *SoC, a: u32, b: u32, fn3: u8, fn7: u8) u32 {
     var result: u32 = 0;
-    fn7 &= 1;
+    const fn7_masked = fn7 & 1;
 
-    if (fn7 == 0) {
+    if (fn7_masked == 0) {
         switch (fn3) {
             0b000 => { // add
                 result = a + b;
@@ -67,10 +67,12 @@ fn ALU(self: *SoC, a: u32, b: u32, fn3: u8, fn7: u8) u32 {
                 } else {
                     self.statusreg &= ~self.FLAG_LT;
                 }
+
+                return void;
             },
-            _ => result = 0,
+            else => result = 0,
         }
-    } else if (fn7 == 1) {
+    } else if (fn7_masked == 1) {
         switch (fn3) {
             0b000 => { // sub
                 result = a - b;
@@ -91,13 +93,13 @@ fn ALU(self: *SoC, a: u32, b: u32, fn3: u8, fn7: u8) u32 {
                 const sa = (i32)(a);
                 result = (u32)(sa >> (b & 0x1F));
             },
-            _ => result = 0,
+            else => result = 0,
         }
     }
     return result;
 }
 
-fn fetch(self: *SoC) u32 {
+pub fn fetch(self: *SoC) u32 {
     var word: u32 = 0;
     word = (self.instruction_memory[self.pc + 0] << 0) |
         (self.instruction_memory[self.pc + 1] << 8) |
@@ -106,28 +108,28 @@ fn fetch(self: *SoC) u32 {
     return word;
 }
 
-fn decode_and_executeAndExecute(self: *SoC, instr: u32) void {
+pub fn decode_and_executeAndExecute(self: *SoC, instr: u32) void {
     const opcode = instr & 0b111;
     switch (opcode) {
         0b000 => execR(self, instr),
         0b001 => execI(self, instr),
         0b010 => execS(self, instr),
         0b011 => execCB(self, instr),
-        0b100 => execT(self, instr),
+        // 0b100 => execT(self, instr),
     }
 }
 
-fn execR(self: *SoC, instr: u32) void {
+pub fn execR(self: *SoC, instr: u32) void {
     const rm = (instr >> 27) & 0b11111; // Rm
     const rn = (instr >> 22) & 0b11111; // Rn
     const rd = (instr >> 10) & 0b11111; // Rd
-    const fn7 = (instr >> 15) & 0b1111111; // fn7
+    const fn7 = ((instr >> 15) & 0b1111111); // fn7
     const fn3 = (instr >> 7) & 0b111; // fn3
 
-    self.regs[rd] = ALU(self, rm, rn, fn3, fn7);
+    self.regs[rd] = ALU(self, rm, rn, @truncate(fn3), @truncate(fn7));
 }
 
-fn execI(self: *SoC, instr: u32) void {
+pub fn execI(self: *SoC, instr: u32) void {
     const rm = (instr >> 27) & 0b11111;
     const imm = (instr >> 15) & 0b1111_1111_1111;
     const rd = (instr >> 10) & 0b11111;
@@ -135,12 +137,15 @@ fn execI(self: *SoC, instr: u32) void {
     const opcode = instr & 0b1111111;
 
     if (opcode == 1) {
-        self.regs[rd] = ALU(self, rm, imm, fn3, 0);
+        self.regs[rd] = ALU(self, rm, imm, @truncate(fn3), 0);
     } else if (opcode == 9) {
         const address = imm + rm;
         switch (fn3) {
             0b000 => { // Load word
-                const mem_word_data: u32 = (self.data_memory[address + 0] << 0 | self.data_memory[address + 1] << 8 | self.data_memory[address + 2] << 16 | self.data_memory[address + 3] << 24);
+                const mem_word_data: u32 = (@as(u32, self.data_memory[address + 0]) << 0 |
+                    @as(u32, self.data_memory[address + 1]) << 8 |
+                    @as(u32, self.data_memory[address + 2]) << 16 |
+                    @as(u32, self.data_memory[address + 3]) << 24);
                 self.regs[rd] = mem_word_data;
             },
             0b001 => { // Load half
@@ -150,12 +155,12 @@ fn execI(self: *SoC, instr: u32) void {
             0b011 => { // Load byte
                 self.regs[rd] = self.data_memory[address];
             },
-            _ => @panic("Error: Invalid fn3 on I-Type Load instruction!\n"), // invalid operation
+            else => @panic("Error: Invalid fn3 on I-Type Load instruction!\n"), // invalid operation
         }
     }
 }
 
-fn execS(self: *SoC, instr: u32) void {
+pub fn execS(self: *SoC, instr: u32) void {
     const rm = (instr >> 27) & 0b11111;
     const rn = (instr >> 22) & 0b11111;
     const imm = (instr >> 10) & 0b1111_1111_1111;
@@ -177,16 +182,18 @@ fn execS(self: *SoC, instr: u32) void {
         0b011 => { // Store byte
             self.data_memory[address] = @truncate(value);
         },
-        _ => @panic("Error: Invalid fn3 on S-Type Store instruction!\n"),
+        else => @panic("Error: Invalid fn3 on S-Type Store instruction!\n"),
     }
 }
 
-fn execCB(self: *SoC, instr: u32) void {
+pub fn execCB(self: *SoC, instr: u32) void {
     const rmd = (instr >> 27) & 0b11111;
-    const imm = (instr >> 10) & 0b1_1111_1111_1111_1111;
+    const raw_imm = (instr >> 10) & 0b1_1111_1111_1111_1111;
     const fn3 = (instr >> 7) & 0b111;
     const opcode = instr & 0b1111111;
-    const offset = (rmd + imm) << 2;
+
+    const imm_signed = @as(i32, @bitCast(raw_imm));
+    const offset = imm_signed << 2;
 
     if (opcode == 3) {
         switch (fn3) {
@@ -216,7 +223,7 @@ fn execCB(self: *SoC, instr: u32) void {
                 }
             },
             0b101 => { // belt
-                if ((self.stautsreg & (self.FLAG_LT | self.FLAG_EQ)) != 0) {
+                if ((self.statusreg & (self.FLAG_LT | self.FLAG_EQ)) != 0) {
                     self.pc += offset;
                 }
             },
@@ -235,13 +242,12 @@ fn execCB(self: *SoC, instr: u32) void {
         switch (fn3) {
             0b000 => {
                 self.regs[rmd] += self.pc + 4;
-                self.pc += imm << 2;
+                self.pc += imm_signed << 2;
             },
+            else => @panic("Error!"),
         }
     }
 }
-
-fn execT(self: *SoC, instr: u32) void {}
 
 pub fn main() !void {}
 
