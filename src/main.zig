@@ -3,9 +3,9 @@ const std = @import("std");
 pub const SoC = struct {
     regs: [32]u32,
     statusreg: u8,
-    pc: u24,
-    instruction_memory: [16777216]u8,
-    data_memory: [16777216]u8,
+    pc: u32,
+    instruction_memory: [256]u8,
+    data_memory: [256]u8,
 
     // Status register's flags
     pub const FLAG_EQ: u8 = 0b00000001;
@@ -28,47 +28,47 @@ fn ALU(self: *SoC, a: u32, b: u32, fn3: u8, fn7: u8) u32 {
 
                 // Carry detection
                 if (result < a) {
-                    self.statusreg |= self.FLAG_C;
+                    self.statusreg |= SoC.FLAG_C;
                 } else {
-                    self.statusreg &= ~self.FLAG_C;
+                    self.statusreg &= ~SoC.FLAG_C;
                 }
 
                 // Overflow detection
-                const signed_a = (i32)(a);
-                const signed_b = (i32)(b);
-                const signed_result = (i32)(result);
+                const signed_a = @as(i32, @intCast(a));
+                const signed_b = @as(i32, @intCast(b));
+                const signed_result = @as(i32, @intCast(result));
 
                 if ((signed_a > 0 and signed_b > 0 and signed_result < 0) or (signed_a < 0 and signed_b < 0 and signed_result >= 0)) {
-                    self.statusreg |= self.FLAG_V;
+                    self.statusreg |= SoC.FLAG_V;
                 } else {
-                    self.statusreg &= ~self.FLAG_V;
+                    self.statusreg &= ~SoC.FLAG_V;
                 }
             },
             0b001 => result = a | b,
             0b010 => result = a & b,
             0b011 => result = a ^ b,
-            0b100 => result = a << b,
-            0b101 => result = a >> b,
+            0b100 => result = a << @truncate(b),
+            0b101 => result = a >> @truncate(b),
             0b110 => { // cmp
                 if (a == b) {
-                    self.statusreg |= self.FLAG_EQ;
+                    self.statusreg |= SoC.FLAG_EQ;
                 } else {
-                    self.statusreg &= ~self.FLAG_EQ;
+                    self.statusreg &= ~SoC.FLAG_EQ;
                 }
 
                 if (a > b) {
-                    self.statusreg |= self.FLAG_GT;
+                    self.statusreg |= SoC.FLAG_GT;
                 } else {
-                    self.statusreg &= ~self.FLAG_GT;
+                    self.statusreg &= ~SoC.FLAG_GT;
                 }
 
                 if (a < b) {
-                    self.statusreg |= self.FLAG_LT;
+                    self.statusreg |= SoC.FLAG_LT;
                 } else {
-                    self.statusreg &= ~self.FLAG_LT;
+                    self.statusreg &= ~SoC.FLAG_LT;
                 }
 
-                return void;
+                result = 0;
             },
             else => result = 0,
         }
@@ -78,20 +78,20 @@ fn ALU(self: *SoC, a: u32, b: u32, fn3: u8, fn7: u8) u32 {
                 result = a - b;
 
                 // Carry detection
-                if (a < b) self.statusreg |= self.FLAG_C;
+                if (a < b) self.statusreg |= SoC.FLAG_C;
 
                 // Underflow detection
-                const signed_a = (i32)(a);
-                const signed_b = (i32)(b);
-                const signed_result = (i32)(result);
+                const signed_a = @as(i32, @intCast(a));
+                const signed_b = @as(i32, @intCast(b));
+                const signed_result = @as(i32, @intCast(result));
 
                 if ((signed_a >= 0 and signed_b < 0 and signed_result < 0) or (signed_a < 0 and signed_b >= 0 and signed_result >= 0)) {
-                    self.statusreg |= self.FLAG_V;
+                    self.statusreg |= SoC.FLAG_V;
                 }
             },
             0b101 => {
-                const sa = (i32)(a);
-                result = (u32)(sa >> (b & 0x1F));
+                const signed_a = @as(i32, @intCast(a));
+                result = @as(u32, @intCast(signed_a >> @truncate(b)));
             },
             else => result = 0,
         }
@@ -126,7 +126,7 @@ pub fn execR(self: *SoC, instr: u32) void {
     const fn7 = ((instr >> 15) & 0b1111111); // fn7
     const fn3 = (instr >> 7) & 0b111; // fn3
 
-    self.regs[rd] = ALU(self, rm, rn, @truncate(fn3), @truncate(fn7));
+    self.regs[rd] = ALU(self, self.regs[rm], self.regs[rn], @truncate(fn3), @truncate(fn7));
 }
 
 pub fn execI(self: *SoC, instr: u32) void {
@@ -192,63 +192,101 @@ pub fn execCB(self: *SoC, instr: u32) void {
     const fn3 = (instr >> 7) & 0b111;
     const opcode = instr & 0b1111111;
 
-    const imm_signed = @as(i32, @bitCast(raw_imm));
+    const imm_signed: i32 = @intCast(@as(i16, @intCast(raw_imm)));
     const offset = imm_signed << 2;
+    const pc_i32: i32 = @intCast(self.pc);
+    const new_pc: u32 = @intCast(pc_i32 + offset);
 
     if (opcode == 3) {
         switch (fn3) {
             0b000 => { // beq
-                if ((self.statusreg & self.FLAG_EQ) != 0) {
-                    self.pc += offset;
+                if ((self.statusreg & SoC.FLAG_EQ) != 0) {
+                    self.pc = new_pc;
                 }
             },
             0b001 => { // bneq
-                if ((self.statusreg & self.FLAG_EQ) == 0) {
-                    self.pc += offset;
+                if ((self.statusreg & SoC.FLAG_EQ) == 0) {
+                    self.pc = new_pc;
                 }
             },
             0b010 => { // bgt
-                if ((self.statusreg & self.FLAG_GT) != 0) {
-                    self.pc += offset;
+                if ((self.statusreg & SoC.FLAG_GT) != 0) {
+                    self.pc = new_pc;
                 }
             },
             0b011 => { // blt
-                if ((self.statusreg & self.FLAG_LT) != 0) {
-                    self.pc += offset;
+                if ((self.statusreg & SoC.FLAG_LT) != 0) {
+                    self.pc = new_pc;
                 }
             },
             0b100 => { // begt
-                if ((self.statusreg & (self.FLAG_GT | self.FLAG_EQ)) != 0) {
-                    self.pc += offset;
+                if ((self.statusreg & (SoC.FLAG_GT | SoC.FLAG_EQ)) != 0) {
+                    self.pc = new_pc;
                 }
             },
             0b101 => { // belt
-                if ((self.statusreg & (self.FLAG_LT | self.FLAG_EQ)) != 0) {
-                    self.pc += offset;
+                if ((self.statusreg & (SoC.FLAG_LT | SoC.FLAG_EQ)) != 0) {
+                    self.pc = new_pc;
                 }
             },
             0b110 => {
-                if ((self.statusreg & self.FLAG_C) != 0) {
-                    self.pc += offset;
+                if ((self.statusreg & SoC.FLAG_C) != 0) {
+                    self.pc = new_pc;
                 }
             },
             0b111 => {
-                if ((self.statusreg & self.FLAG_V) != 0) {
-                    self.pc += offset;
+                if ((self.statusreg & SoC.FLAG_V) != 0) {
+                    self.pc = new_pc;
                 }
             },
+            else => @panic("D:\n"),
         }
     } else if (opcode == 11) {
         switch (fn3) {
             0b000 => {
                 self.regs[rmd] += self.pc + 4;
-                self.pc += imm_signed << 2;
+                self.pc += @intCast(imm_signed << 2);
             },
             else => @panic("Error!"),
         }
     }
 }
 
-pub fn main() !void {}
-
 // Jun <3 Jay
+
+test "execR: ADD" {
+    var soc = SoC{
+        .regs = [_]u32{0} ** 32,
+        .statusreg = 0,
+        .pc = 0,
+        .instruction_memory = [_]u8{0} ** 256,
+        .data_memory = [_]u8{0} ** 256,
+    };
+
+    // Rm = 1, Rn = 2, Rd = 3
+    soc.regs[1] = 7;
+    soc.regs[2] = 8;
+
+    // 필드 정의
+    const rm: u32 = 1;
+    const rn: u32 = 2;
+    const rd: u32 = 3;
+    const fn7: u32 = 0b0000000;
+    const fn3: u32 = 0b000;
+    const opcode: u32 = 0b0000000;
+
+    // 정확한 비트 배치로 instr 생성
+    const instr: u32 =
+        (rm << 27) |
+        (rn << 22) |
+        (fn7 << 15) |
+        (rd << 10) |
+        (fn3 << 7) |
+        opcode;
+
+    // 실행
+    execR(&soc, instr);
+
+    // 결과 확인
+    try std.testing.expectEqual(@as(u32, 15), soc.regs[rd]);
+}
