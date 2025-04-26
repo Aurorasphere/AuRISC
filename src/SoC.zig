@@ -22,21 +22,23 @@ fn ALU(self: *SoC, a: u32, b: u32, fn3: u8, fn7: u8) u32 {
     if (fn7_masked == 0) {
         switch (fn3) {
             0b000 => { // add
-                result = a + b;
+                const sum = @addWithOverflow(a, b);
+                result = sum[0];
 
                 // Carry detection
-                if (result < a) {
+                if (sum[1] != 0) {
                     self.statusreg |= SoC.FLAG_C;
                 } else {
                     self.statusreg &= ~SoC.FLAG_C;
                 }
 
                 // Overflow detection
-                const signed_a = @as(i32, @intCast(a));
-                const signed_b = @as(i32, @intCast(b));
-                const signed_result = @as(i32, @intCast(result));
-
-                if ((signed_a > 0 and signed_b > 0 and signed_result < 0) or (signed_a < 0 and signed_b < 0 and signed_result >= 0)) {
+                const signed_a: i32 = @bitCast(a);
+                const signed_b: i32 = @bitCast(b);
+                const signed_result: i32 = @bitCast(result);
+                if ((signed_a > 0 and signed_b > 0 and signed_result < 0) or
+                    (signed_a < 0 and signed_b < 0 and signed_result >= 0))
+                {
                     self.statusreg |= SoC.FLAG_V;
                 } else {
                     self.statusreg &= ~SoC.FLAG_V;
@@ -73,23 +75,31 @@ fn ALU(self: *SoC, a: u32, b: u32, fn3: u8, fn7: u8) u32 {
     } else if (fn7_masked == 1) {
         switch (fn3) {
             0b000 => { // sub
-                result = a - b;
+                const diff = @subWithOverflow(a, b);
+                result = diff[0];
 
-                // Carry detection
-                if (a < b) self.statusreg |= SoC.FLAG_C;
+                // Carry detection (borrow 발생)
+                if (a < b) {
+                    self.statusreg |= SoC.FLAG_C;
+                } else {
+                    self.statusreg &= ~SoC.FLAG_C;
+                }
 
-                // Underflow detection
-                const signed_a = @as(i32, @intCast(a));
-                const signed_b = @as(i32, @intCast(b));
-                const signed_result = @as(i32, @intCast(result));
-
-                if ((signed_a >= 0 and signed_b < 0 and signed_result < 0) or (signed_a < 0 and signed_b >= 0 and signed_result >= 0)) {
+                // Overflow detection
+                const signed_a: i32 = @bitCast(a);
+                const signed_b: i32 = @bitCast(b);
+                const signed_result: i32 = @bitCast(result);
+                if ((signed_a > 0 and signed_b < 0 and signed_result < 0) or
+                    (signed_a < 0 and signed_b > 0 and signed_result >= 0))
+                {
                     self.statusreg |= SoC.FLAG_V;
+                } else {
+                    self.statusreg &= ~SoC.FLAG_V;
                 }
             },
-            0b101 => {
-                const signed_a = @as(i32, @intCast(a));
-                result = @as(u32, @intCast(signed_a >> @truncate(b)));
+            0b101 => { // asr (arithmetic shift right)
+                const signed_a: i32 = @bitCast(a);
+                result = @bitCast(signed_a >> @truncate(b));
             },
             else => result = 0,
         }
@@ -106,7 +116,7 @@ pub fn fetch(self: *SoC) u32 {
     return word;
 }
 
-pub fn decode_and_executeAndExecute(self: *SoC, instr: u32) void {
+pub fn decode_and_execute(self: *SoC, instr: u32) void {
     const opcode = instr & 0b111;
     switch (opcode) {
         0b000 => execR(self, instr),
@@ -114,6 +124,7 @@ pub fn decode_and_executeAndExecute(self: *SoC, instr: u32) void {
         0b010 => execS(self, instr),
         0b011 => execCB(self, instr),
         // 0b100 => execT(self, instr),
+        else => @panic("Error: unknown opcode!"),
     }
 }
 
@@ -250,18 +261,22 @@ fn execCB(self: *SoC, instr: u32) void {
     }
 }
 
-fn SoC_init(self: *SoC) void {
+pub fn SoC_init(self: *SoC) void {
     self.regs = [_]u32{0} ** 32;
     self.statusreg = 0;
     self.pc = 0;
-    self.instruction_memory = [_]u8{0} ** self.instruction_memory.len;
-    self.data_memory = [_]u8{0} ** self.data_memory.len;
+    self.instruction_memory = [_]u8{0} ** 256;
+    self.data_memory = [_]u8{0} ** 256;
 }
 
 pub fn SoC_main(self: *SoC) void {
     SoC_init(self);
     while (true) {
         const instr = fetch(self);
-        decode_and_executeAndExecute(self, instr);
+        decode_and_execute(self, instr);
     }
+}
+
+pub fn SoC_for_test(self: *SoC, instr: u32) void {
+    decode_and_execute(self, instr);
 }
