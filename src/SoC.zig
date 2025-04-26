@@ -249,3 +249,19 @@ fn execCB(self: *SoC, instr: u32) void {
         }
     }
 }
+
+fn SoC_init(self: *SoC) void {
+    self.regs = [_]u32{0} ** 32;
+    self.statusreg = 0;
+    self.pc = 0;
+    self.instruction_memory = [_]u8{0} ** self.instruction_memory.len;
+    self.data_memory = [_]u8{0} ** self.data_memory.len;
+}
+
+pub fn SoC_main(self: *SoC) void {
+    SoC_init(self);
+    while (true) {
+        const instr = fetch(self);
+        decode_and_executeAndExecute(self, instr);
+    }
+}

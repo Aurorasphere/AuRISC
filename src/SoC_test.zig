@@ -1,7 +1,7 @@
 const std = @import("std");
 const aurosoc = @import("SoC.zig");
 
-test "execR: ADD" {
+test "execR test" {
     var soc = aurosoc.SoC{
         .regs = [_]u32{0} ** 32,
         .statusreg = 0,
@@ -14,7 +14,7 @@ test "execR: ADD" {
     soc.regs[1] = 7;
     soc.regs[2] = 8;
 
-    // 필드 정의
+    // define instr field
     const rm: u32 = 1;
     const rn: u32 = 2;
     const rd: u32 = 3;
@@ -22,7 +22,6 @@ test "execR: ADD" {
     const fn3: u32 = 0b000;
     const opcode: u32 = 0b0000000;
 
-    // 정확한 비트 배치로 instr 생성
     const instr: u32 =
         (rm << 27) |
         (rn << 22) |
@@ -31,9 +30,9 @@ test "execR: ADD" {
         (fn3 << 7) |
         opcode;
 
-    // 실행
+    // execute
     aurosoc.execR(&soc, instr);
 
-    // 결과 확인
+    // conrimation
     try std.testing.expectEqual(@as(u32, 15), soc.regs[rd]);
 }
