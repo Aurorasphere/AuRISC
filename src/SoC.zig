@@ -146,9 +146,9 @@ fn execI(self: *SoC, instr: u32) void {
     const opcode = instr & 0b1111111;
 
     if (opcode == 1) {
-        self.regs[rd] = ALU(self, rm, imm, @truncate(fn3), 0);
+        self.regs[rd] = ALU(self, self.regs[rm], imm, @truncate(fn3), 0);
     } else if (opcode == 9) {
-        const address = imm + rm;
+        const address = imm + self.regs[rm];
         switch (fn3) {
             0b000 => { // Load word
                 const mem_word_data: u32 = (@as(u32, self.data_memory[address + 0]) << 0 |
@@ -158,11 +158,11 @@ fn execI(self: *SoC, instr: u32) void {
                 self.regs[rd] = mem_word_data;
             },
             0b001 => { // Load half
-                const mem_half_data = (self.data_memory[address + 0] << 0 | self.data_memory[address + 1]);
+                const mem_half_data = (@as(u32, self.data_memory[address + 0]) | @as(u32, self.data_memory[address + 1]) << 8);
                 self.regs[rd] = mem_half_data;
             },
             0b011 => { // Load byte
-                self.regs[rd] = self.data_memory[address];
+                self.regs[rd] = @as(u32, self.data_memory[address]);
             },
             else => @panic("Error: Invalid fn3 on I-Type Load instruction!\n"), // invalid operation
         }
