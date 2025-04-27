@@ -1,9 +1,12 @@
+pub const DM_SIZE = 4096;
+pub const IM_SIZE = 4096;
+
 pub const SoC = struct {
     regs: [32]u32,
     statusreg: u8,
     pc: u32,
-    instruction_memory: [256]u8,
-    data_memory: [256]u8,
+    instruction_memory: [IM_SIZE]u8,
+    data_memory: [DM_SIZE]u8,
 
     // Status register's flags
     pub const FLAG_EQ: u8 = 0b00000001;
@@ -148,23 +151,28 @@ fn execI(self: *SoC, instr: u32) void {
     if (opcode == 1) {
         self.regs[rd] = ALU(self, self.regs[rm], imm, @truncate(fn3), 0);
     } else if (opcode == 9) {
-        const address = imm + self.regs[rm];
+        const address: i32 = @as(i32, @intCast(self.regs[rm] + imm));
+        const sum_address = if (address < 0) DM_SIZE + address else address;
+        const wrapped_address: usize = @intCast(sum_address); // wtf???
+
         switch (fn3) {
-            0b000 => { // Load word
-                const mem_word_data: u32 = (@as(u32, self.data_memory[address + 0]) << 0 |
-                    @as(u32, self.data_memory[address + 1]) << 8 |
-                    @as(u32, self.data_memory[address + 2]) << 16 |
-                    @as(u32, self.data_memory[address + 3]) << 24);
+            0b000 => {
+                const mem_word_data: u32 = (@as(u32, self.data_memory[wrapped_address + 0]) << 0 |
+                    (@as(u32, self.data_memory[wrapped_address + 1]) << 8) |
+                    (@as(u32, self.data_memory[wrapped_address + 2]) << 16) |
+                    (@as(u32, self.data_memory[wrapped_address + 3]) << 24));
                 self.regs[rd] = mem_word_data;
             },
-            0b001 => { // Load half
-                const mem_half_data = (@as(u32, self.data_memory[address + 0]) | @as(u32, self.data_memory[address + 1]) << 8);
+            0b001 => {
+                const mem_half_data =
+                    (@as(u32, self.data_memory[wrapped_address + 0]) |
+                        (@as(u32, self.data_memory[wrapped_address + 1]) << 8));
                 self.regs[rd] = mem_half_data;
             },
-            0b011 => { // Load byte
-                self.regs[rd] = @as(u32, self.data_memory[address]);
+            0b011 => {
+                self.regs[rd] = @as(u32, self.data_memory[wrapped_address]);
             },
-            else => @panic("Error: Invalid fn3 on I-Type Load instruction!\n"), // invalid operation
+            else => @panic("Error: Invalid fn3 on I-Type Load instruction!\n"),
         }
     }
 }
@@ -174,22 +182,25 @@ fn execS(self: *SoC, instr: u32) void {
     const rn = (instr >> 22) & 0b11111;
     const imm = (instr >> 10) & 0b1111_1111_1111;
     const fn3 = (instr >> 7) & 0b111;
-    const address = imm + rm;
+
+    const address: i32 = @as(i32, @bitCast(self.regs[rm] + imm));
+    const sum_address = if (address < 0) DM_SIZE + address else address;
+    const wrapped_address: usize = @intCast(sum_address); // wtf???
     const value = self.regs[rn];
 
     switch (fn3) {
-        0b000 => { // Store word
-            self.data_memory[address + 0] = @truncate(value >> 0);
-            self.data_memory[address + 1] = @truncate(value >> 8);
-            self.data_memory[address + 2] = @truncate(value >> 16);
-            self.data_memory[address + 3] = @truncate(value >> 24);
+        0b000 => {
+            self.data_memory[wrapped_address + 0] = @truncate(value >> 0);
+            self.data_memory[wrapped_address + 1] = @truncate(value >> 8);
+            self.data_memory[wrapped_address + 2] = @truncate(value >> 16);
+            self.data_memory[wrapped_address + 3] = @truncate(value >> 24);
         },
-        0b001 => { // Store half
-            self.data_memory[address + 0] = @truncate(value >> 0);
-            self.data_memory[address + 1] = @truncate(value >> 8);
+        0b001 => {
+            self.data_memory[wrapped_address + 0] = @truncate(value >> 0);
+            self.data_memory[wrapped_address + 1] = @truncate(value >> 8);
         },
-        0b011 => { // Store byte
-            self.data_memory[address] = @truncate(value);
+        0b011 => {
+            self.data_memory[wrapped_address] = @truncate(value >> 0);
         },
         else => @panic("Error: Invalid fn3 on S-Type Store instruction!\n"),
     }
@@ -265,8 +276,8 @@ pub fn SoC_init(self: *SoC) void {
     self.regs = [_]u32{0} ** 32;
     self.statusreg = 0;
     self.pc = 0;
-    self.instruction_memory = [_]u8{0} ** 256;
-    self.data_memory = [_]u8{0} ** 256;
+    self.instruction_memory = [_]u8{0} ** IM_SIZE;
+    self.data_memory = [_]u8{0} ** DM_SIZE;
 }
 
 pub fn SoC_main(self: *SoC) void {
