@@ -78,11 +78,11 @@ fn test_cmp(rm_value: u32, rn_value: u32, eq_flag: bool, gt_flag: bool, lt_flag:
     try testing.expect(((soc.statusreg & aurosoc.SoC.FLAG_LT) != 0) == lt_flag);
 }
 
-fn test_execI_addi(rm_value: u32, imm_value: i32, expected_result: u32) !void {
+fn test_execI(fn3: u32, rm_value: u32, imm_value: i32, expected_result: u32) !void {
     var soc = create_and_init_soc();
     soc.regs[1] = rm_value;
 
-    const instr = execI_instr(1, @intCast(imm_value), 3, 0b000, 0b0000001);
+    const instr = execI_instr(1, @intCast(imm_value), 3, fn3, 0b0000001);
     aurosoc.SoC_for_test(&soc, instr);
 
     try testing.expectEqual(expected_result, soc.regs[3]);
@@ -95,7 +95,6 @@ fn test_execI_load(rm_value: u32, imm_value: i32, load_size: enum { Word, Half, 
     const address: i32 = @as(i32, @intCast(rm_value)) + imm_value;
     const sum_address = if (address < 0) aurosoc.DM_SIZE + address else address;
     const wrapped_address: usize = @intCast(sum_address);
-    std.debug.print("[DEBUG] Address: {}\n", .{wrapped_address});
     switch (load_size) {
         .Word => {
             soc.data_memory[wrapped_address + 0] = @truncate(expected_result >> 0);
@@ -119,17 +118,7 @@ fn test_execI_load(rm_value: u32, imm_value: i32, load_size: enum { Word, Half, 
     };
 
     const instr = execI_instr(1, imm_value, 3, fn3, 0b001001);
-    std.debug.print("[DEBUG] Instr. Value: {b}\n", .{instr});
     aurosoc.SoC_for_test(&soc, instr);
-
-    //    std.debug.print("\n[DEBUG] soc.data_memory contents:\n", .{});
-    //    for (soc.data_memory, 0..) |byte, idx| {
-    //        std.debug.print("{x:0>2} ", .{byte});
-    //        if ((idx + 1) % 16 == 0) {
-    //            std.debug.print("\n", .{});
-    //        }
-    //    }
-    //    std.debug.print("\n", .{});
 
     try testing.expectEqual(expected_result, soc.regs[3]);
 }
@@ -150,7 +139,7 @@ fn test_execS_store(base_addr: i32, value_to_store: u32, store_size: enum { Word
 
     aurosoc.SoC_for_test(&soc, instr);
 
-    const address: i32 = @intCast(soc.regs[1] + imm);
+    const address: i32 = @as(i32, @bitCast(soc.regs[1])) + imm;
     const sum_address = if (address < 0) aurosoc.DM_SIZE + address else address;
     const wrapped_address: usize = @intCast(sum_address);
 
@@ -225,13 +214,27 @@ test "execR: cmp less than" {
     try test_cmp(10, 42, false, false, true);
 }
 
-// Immediate (ADDI)
+// Immediate (Arith-logic)
 
 test "execI: add immediate (ADDI)" {
-    try test_execI_addi(100, 23, 123);
+    try test_execI(0, 100, 23, 123);
 }
-
-// Load
+test "execI: add immediate (ORI)" {
+    try test_execI(1, 0b1100, 0b0101, 0b1101);
+}
+test "execI: add immediate (ANDI)" {
+    try test_execI(2, 0b1100, 0b0101, 0b0100);
+}
+test "execI: add immediate (XORI)" {
+    try test_execI(3, 0b1100, 0b0101, 0b1001);
+}
+test "execI: add immediate (LSLI)" {
+    try test_execI(4, 0b0011, 2, 0b1100);
+}
+test "execI: add immediate (LSRI)" {
+    try test_execI(5, 0b1100, 2, 0b0011);
+}
+// Immediate (Load)
 
 test "execI: load word (LW)" {
     try test_execI_load(0, 0x8, .Word, 0x78563412);
