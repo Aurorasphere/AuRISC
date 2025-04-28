@@ -1,5 +1,5 @@
-pub const DM_SIZE = 4096;
-pub const IM_SIZE = 4096;
+pub const DM_SIZE = 0x1000;
+pub const IM_SIZE = 0x1000;
 
 pub const SoC = struct {
     regs: [32]u32,
@@ -17,6 +17,18 @@ pub const SoC = struct {
     pub const FLAG_INT: u8 = 0b00100000;
     pub const FLAG_SV: u8 = 0b11000000;
 };
+fn signExtend12(x: u32) i32 {
+    // 0x800 비트가 1이면 음수
+    const mask: u32 = 0x800;
+    const full: u32 = 0xFFFFF000;
+
+    const extended: u32 = if ((x & mask) != 0) (x | full) else x;
+    return @bitCast(extended);
+}
+
+fn wrapAddress(addr: i32) usize {
+    return @intCast(@mod(addr, @as(i32, DM_SIZE)));
+}
 
 fn ALU(self: *SoC, a: u32, b: u32, fn3: u8, fn7: u8) u32 {
     var result: u32 = 0;
@@ -129,6 +141,7 @@ pub fn decode_and_execute(self: *SoC, instr: u32) void {
         // 0b100 => execT(self, instr),
         else => @panic("Error: unknown opcode!"),
     }
+    self.pc += 4;
 }
 
 fn execR(self: *SoC, instr: u32) void {
@@ -143,47 +156,59 @@ fn execR(self: *SoC, instr: u32) void {
 
 fn execI(self: *SoC, instr: u32) void {
     const rm = (instr >> 27) & 0b11111;
-    const imm = (instr >> 15) & 0b1111_1111_1111;
+    const imm_raw = (instr >> 15) & 0xFFF; // 12-bit
+    const imm = signExtend12(imm_raw); // ← 부호 확장
     const rd = (instr >> 10) & 0b11111;
     const fn3 = (instr >> 7) & 0b111;
     const opcode = instr & 0b1111111;
 
-    if (opcode == 1) {
-        self.regs[rd] = ALU(self, self.regs[rm], imm, @truncate(fn3), 0);
-    } else if (opcode == 9) {
-        const address: i32 = @as(i32, @intCast(self.regs[rm] + imm));
-        const sum_address = if (address < 0) DM_SIZE + address else address;
-        const wrapped_address: usize = @intCast(sum_address); // wtf???
+    switch (opcode) {
+        1 => { // ALU-immediate
+            self.regs[rd] = ALU(
+                self,
+                self.regs[rm],
+                @bitCast(imm), // b 인자는 u32
+                @truncate(fn3),
+                0,
+            );
+        },
 
-        switch (fn3) {
-            0b000 => {
-                const mem_word_data: u32 = (@as(u32, self.data_memory[wrapped_address + 0]) << 0 |
-                    (@as(u32, self.data_memory[wrapped_address + 1]) << 8) |
-                    (@as(u32, self.data_memory[wrapped_address + 2]) << 16) |
-                    (@as(u32, self.data_memory[wrapped_address + 3]) << 24));
-                self.regs[rd] = mem_word_data;
-            },
-            0b001 => {
-                const mem_half_data =
-                    (@as(u32, self.data_memory[wrapped_address + 0]) |
-                        (@as(u32, self.data_memory[wrapped_address + 1]) << 8));
-                self.regs[rd] = mem_half_data;
-            },
-            0b011 => {
-                self.regs[rd] = @as(u32, self.data_memory[wrapped_address]);
-            },
-            else => @panic("Error: Invalid fn3 on I-Type Load instruction!\n"),
-        }
+        9 => { // Load
+            const addr_i32: i32 = @as(i32, @bitCast(self.regs[rm])) + imm;
+            const addr = wrapAddress(addr_i32);
+
+            switch (fn3) {
+                0b000 => { // LW
+                    self.regs[rd] =
+                        (@as(u32, self.data_memory[addr + 0]) << 0) |
+                        (@as(u32, self.data_memory[addr + 1]) << 8) |
+                        (@as(u32, self.data_memory[addr + 2]) << 16) |
+                        (@as(u32, self.data_memory[addr + 3]) << 24);
+                },
+                0b001 => { // LH
+                    self.regs[rd] =
+                        (@as(u32, self.data_memory[addr + 0]) << 0) |
+                        (@as(u32, self.data_memory[addr + 1]) << 8);
+                },
+                0b011 => { // LB
+                    self.regs[rd] = self.data_memory[addr];
+                },
+                else => @panic("Invalid fn3 for I-Type Load"),
+            }
+        },
+
+        else => @panic("Invalid I-Type opcode"),
     }
 }
 
 fn execS(self: *SoC, instr: u32) void {
     const rm = (instr >> 27) & 0b11111;
     const rn = (instr >> 22) & 0b11111;
-    const imm = (instr >> 10) & 0b1111_1111_1111;
+    const imm_raw = (instr >> 10) & 0b1111_1111_1111;
+    const imm = signExtend12(imm_raw);
     const fn3 = (instr >> 7) & 0b111;
 
-    const address: i32 = @as(i32, @bitCast(self.regs[rm] + imm));
+    const address: i32 = @as(i32, @bitCast(self.regs[rm])) + imm;
     const sum_address = if (address < 0) DM_SIZE + address else address;
     const wrapped_address: usize = @intCast(sum_address); // wtf???
     const value = self.regs[rn];

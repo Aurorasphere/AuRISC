@@ -92,7 +92,7 @@ fn test_execI_load(rm_value: u32, imm_value: i32, load_size: enum { Word, Half, 
     var soc = create_and_init_soc();
     soc.regs[1] = rm_value;
 
-    const address: i32 = @as(i32, @intCast(rm_value)) + imm_value;
+    const address: i32 = @as(i32, @bitCast(rm_value)) + imm_value;
     const sum_address = if (address < 0) aurosoc.DM_SIZE + address else address;
     const wrapped_address: usize = @intCast(sum_address);
     switch (load_size) {
@@ -146,16 +146,16 @@ fn test_execS_store(base_addr: i32, value_to_store: u32, store_size: enum { Word
     switch (store_size) {
         .Word => {
             const actual =
-                (@as(u32, soc.data_memory[wrapped_address + 0]) << 0) |
-                (@as(u32, soc.data_memory[wrapped_address + 1]) << 8) |
-                (@as(u32, soc.data_memory[wrapped_address + 2]) << 16) |
-                (@as(u32, soc.data_memory[wrapped_address + 3]) << 24);
+                (@as(u32, soc.data_memory[wrapped_address + 0]) << 0 |
+                    (@as(u32, soc.data_memory[wrapped_address + 1]) << 8) |
+                    (@as(u32, soc.data_memory[wrapped_address + 2]) << 16) |
+                    (@as(u32, soc.data_memory[wrapped_address + 3]) << 24));
             try testing.expectEqual(expected_memory_value, actual);
         },
         .Half => {
             const actual =
-                (@as(u32, soc.data_memory[wrapped_address + 0]) << 0) |
-                (@as(u32, soc.data_memory[wrapped_address + 1]) << 8);
+                (@as(u32, soc.data_memory[wrapped_address + 0]) << 0 |
+                    (@as(u32, soc.data_memory[wrapped_address + 1]) << 8));
             try testing.expectEqual(expected_memory_value & 0xFFFF, actual);
         },
         .Byte => {
@@ -165,6 +165,16 @@ fn test_execS_store(base_addr: i32, value_to_store: u32, store_size: enum { Word
     }
 }
 
+fn test_execCB(fn3: u32, rm_value: u32, offset_value: i32, expected_result: u32, statusreg: u8) !void {
+    var soc = create_and_init_soc();
+    soc.regs[1] = rm_value;
+    const instr = (1 << 27) | (offset_value << 10) | (fn3 << 7) | 0b0000011;
+
+    soc.statusreg = statusreg;
+    aurosoc.SoC_for_test(&soc, instr);
+
+    try testing.expectEqual(expected_result, soc.pc);
+}
 // ----------------- 테스트 케이스 -----------------
 
 // Arithmetic
