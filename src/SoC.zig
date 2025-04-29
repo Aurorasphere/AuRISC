@@ -17,8 +17,9 @@ pub const SoC = struct {
     pub const FLAG_INT: u8 = 0b00100000;
     pub const FLAG_SV: u8 = 0b11000000;
 };
+
 fn signExtend12(x: u32) i32 {
-    // 0x800 비트가 1이면 음수
+    // if 0x800th bit == 1, it's a negative number
     const mask: u32 = 0x800;
     const full: u32 = 0xFFFFF000;
 

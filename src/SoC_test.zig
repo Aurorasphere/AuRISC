@@ -1,5 +1,3 @@
-// SoC_test.zig (수정본)
-
 const std = @import("std");
 const testing = std.testing;
 const aurosoc = @import("SoC.zig");
