@@ -125,10 +125,10 @@ fn ALU(self: *SoC, a: u32, b: u32, fn3: u8, fn7: u8) u32 {
 
 pub fn fetch(self: *SoC) u32 {
     var word: u32 = 0;
-    word = (self.instruction_memory[self.pc + 0] << 0) |
-        (self.instruction_memory[self.pc + 1] << 8) |
-        (self.instruction_memory[self.pc + 2] << 16) |
-        (self.instruction_memory[self.pc + 3] << 24);
+    word = (@as(u32, self.instruction_memory[self.pc + 0]) << 0) |
+        (@as(u32, self.instruction_memory[self.pc + 1]) << 8) |
+        (@as(u32, self.instruction_memory[self.pc + 2]) << 16) |
+        (@as(u32, self.instruction_memory[self.pc + 3]) << 24);
     return word;
 }
 
@@ -304,6 +304,16 @@ pub fn SoC_init(self: *SoC) void {
     self.pc = 0;
     self.instruction_memory = [_]u8{0} ** IM_SIZE;
     self.data_memory = [_]u8{0} ** DM_SIZE;
+}
+
+pub fn SoC_create() SoC {
+    return SoC{
+        .regs = [_]u32{0} ** 32,
+        .statusreg = 0,
+        .pc = 0,
+        .instruction_memory = [_]u8{0} ** IM_SIZE,
+        .data_memory = [_]u8{0} ** DM_SIZE,
+    };
 }
 
 pub fn SoC_main(self: *SoC) void {

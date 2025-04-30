@@ -9,22 +9,22 @@ fn formatSize(size: usize) [32]u8 {
     if (size < 1024) {
         _ = std.fmt.bufPrint(&buffer, "{d} B", .{size}) catch {};
     } else if (size < 1024 * 1024) {
-        _ = std.fmt.bufPrint(&buffer, "{.2} KB", .{size_f / 1024.0}) catch {};
+        _ = std.fmt.bufPrint(&buffer, "{} KB", .{size_f / 1024.0}) catch {};
     } else if (size < 1024 * 1024 * 1024) {
-        _ = std.fmt.bufPrint(&buffer, "{.2} MB", .{size_f / 1048576.0}) catch {};
+        _ = std.fmt.bufPrint(&buffer, "{} MB", .{size_f / 1048576.0}) catch {};
     } else {
-        _ = std.fmt.bufPrint(&buffer, "{.2} GB", .{size_f / 1073741824.0}) catch {};
+        _ = std.fmt.bufPrint(&buffer, "{} GB", .{size_f / 1073741824.0}) catch {};
     }
 
     return buffer;
 }
 
-pub fn load_program(soc: *SoC, path: []const u8) !void {
+pub fn load_program(soc: *SoC.SoC, path: []const u8) !void {
     var file = try std.fs.cwd().openFile(path, .{});
     defer file.close();
 
     const file_size = (try file.stat()).size;
-    if (file_size > soc.IM_SIZE) return error.FileTooLarge;
+    if (file_size > SoC.IM_SIZE) return error.FileTooLarge;
 
     const bytes_read = try file.readAll(soc.instruction_memory[0..file_size]);
     if (bytes_read != file_size) return error.UnexpectedEof;

@@ -1,19 +1,9 @@
 const std = @import("std");
 const testing = std.testing;
-const aurosoc = @import("SoC.zig");
-
-pub fn SoC_create() aurosoc.SoC {
-    return aurosoc.SoC{
-        .regs = [_]u32{0} ** 32,
-        .statusreg = 0,
-        .pc = 0,
-        .instruction_memory = [_]u8{0} ** aurosoc.IM_SIZE,
-        .data_memory = [_]u8{0} ** aurosoc.DM_SIZE,
-    };
-}
+const aurosoc = @import("soc.zig");
 
 fn create_and_init_soc() aurosoc.SoC {
-    var soc = SoC_create();
+    var soc = aurosoc.SoC_create();
     aurosoc.SoC_init(&soc);
     return soc;
 }
