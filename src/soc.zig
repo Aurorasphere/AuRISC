@@ -158,7 +158,7 @@ fn execR(self: *SoC, instr: u32) void {
 fn execI(self: *SoC, instr: u32) void {
     const rm = (instr >> 27) & 0b11111;
     const imm_raw = (instr >> 15) & 0xFFF; // 12-bit
-    const imm = signExtend12(imm_raw); // ← 부호 확장
+    const imm = signExtend12(imm_raw); // ← Sign-Extend
     const rd = (instr >> 10) & 0b11111;
     const fn3 = (instr >> 7) & 0b111;
     const opcode = instr & 0b1111111;
@@ -168,7 +168,7 @@ fn execI(self: *SoC, instr: u32) void {
             self.regs[rd] = ALU(
                 self,
                 self.regs[rm],
-                @bitCast(imm), // b 인자는 u32
+                @bitCast(imm), // Argument b is u32
                 @truncate(fn3),
                 0,
             );
@@ -298,6 +298,8 @@ fn execCB(self: *SoC, instr: u32) void {
     }
 }
 
+// ------------------------- SoC-itself Related Functions -------------------------
+
 pub fn SoC_init(self: *SoC) void {
     self.regs = [_]u32{0} ** 32;
     self.statusreg = 0;
@@ -322,8 +324,4 @@ pub fn SoC_main(self: *SoC) void {
         const instr = fetch(self);
         decode_and_execute(self, instr);
     }
-}
-
-pub fn SoC_for_test(self: *SoC, instr: u32) void {
-    decode_and_execute(self, instr);
 }
