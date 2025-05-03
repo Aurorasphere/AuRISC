@@ -1,5 +1,9 @@
-pub const DM_SIZE = 0x1000;
-pub const IM_SIZE = 0x1000;
+const std = @import("std");
+const alu = @import("alu.zig");
+
+pub const DM_SIZE: u32 = 24 * 1024 * 1024;
+pub const IM_SIZE: u32 = 0x1000;
+pub const RAM_SIZE: u32 = 16 * 1024 * 1024;
 
 pub const SoC = struct {
     regs: [32]u32,
@@ -27,100 +31,54 @@ fn signExtend12(x: u32) i32 {
     return @bitCast(extended);
 }
 
-fn wrapAddress(addr: i32) usize {
-    return @intCast(@mod(addr, @as(i32, DM_SIZE)));
+fn write_mem_u8(self: *SoC, addr: u32, value: u8) void {
+    if (addr < RAM_SIZE) {
+        self.data_memory[@intCast(addr)] = value;
+    } else if (addr == 0xFFFF_0002) {
+        std.debug.print("{c}", .{value}); // TTY 출력
+    } else if (addr == 0xFFFF_0003) {
+        std.debug.print("\n[TTY: Clear screen command received]\n", .{});
+    } else {
+        @panic("Invalid write_mem_u8: address out of range or unmapped");
+    }
 }
 
-fn ALU(self: *SoC, a: u32, b: u32, fn3: u8, fn7: u8) u32 {
-    var result: u32 = 0;
-    const fn7_masked = fn7 & 1;
+fn write_mem_u16(self: *SoC, addr: u32, value: u16) void {
+    self.write_mem_u8(addr, @truncate(value >> 0));
+    self.write_mem_u8(addr + 1, @truncate(value >> 8));
+}
 
-    if (fn7_masked == 0) {
-        switch (fn3) {
-            0b000 => { // add
-                const sum = @addWithOverflow(a, b);
-                result = sum[0];
+fn write_mem_u32(self: *SoC, addr: u32, value: u32) void {
+    self.write_mem_u8(addr, @truncate(value >> 0));
+    self.write_mem_u8(addr + 1, @truncate(value >> 8));
+    self.write_mem_u8(addr + 2, @truncate(value >> 16));
+    self.write_mem_u8(addr + 3, @truncate(value >> 24));
+}
 
-                // Carry detection
-                if (sum[1] != 0) {
-                    self.statusreg |= SoC.FLAG_C;
-                } else {
-                    self.statusreg &= ~SoC.FLAG_C;
-                }
-
-                // Overflow detection
-                const signed_a: i32 = @bitCast(a);
-                const signed_b: i32 = @bitCast(b);
-                const signed_result: i32 = @bitCast(result);
-                if ((signed_a > 0 and signed_b > 0 and signed_result < 0) or
-                    (signed_a < 0 and signed_b < 0 and signed_result >= 0))
-                {
-                    self.statusreg |= SoC.FLAG_V;
-                } else {
-                    self.statusreg &= ~SoC.FLAG_V;
-                }
-            },
-            0b001 => result = a | b,
-            0b010 => result = a & b,
-            0b011 => result = a ^ b,
-            0b100 => result = a << @truncate(b),
-            0b101 => result = a >> @truncate(b),
-            0b110 => { // cmp
-                if (a == b) {
-                    self.statusreg |= SoC.FLAG_EQ;
-                } else {
-                    self.statusreg &= ~SoC.FLAG_EQ;
-                }
-
-                if (a > b) {
-                    self.statusreg |= SoC.FLAG_GT;
-                } else {
-                    self.statusreg &= ~SoC.FLAG_GT;
-                }
-
-                if (a < b) {
-                    self.statusreg |= SoC.FLAG_LT;
-                } else {
-                    self.statusreg &= ~SoC.FLAG_LT;
-                }
-
-                result = 0;
-            },
-            else => result = 0,
-        }
-    } else if (fn7_masked == 1) {
-        switch (fn3) {
-            0b000 => { // sub
-                const diff = @subWithOverflow(a, b);
-                result = diff[0];
-
-                // Carry detection (borrow 발생)
-                if (a < b) {
-                    self.statusreg |= SoC.FLAG_C;
-                } else {
-                    self.statusreg &= ~SoC.FLAG_C;
-                }
-
-                // Overflow detection
-                const signed_a: i32 = @bitCast(a);
-                const signed_b: i32 = @bitCast(b);
-                const signed_result: i32 = @bitCast(result);
-                if ((signed_a > 0 and signed_b < 0 and signed_result < 0) or
-                    (signed_a < 0 and signed_b > 0 and signed_result >= 0))
-                {
-                    self.statusreg |= SoC.FLAG_V;
-                } else {
-                    self.statusreg &= ~SoC.FLAG_V;
-                }
-            },
-            0b101 => { // asr (arithmetic shift right)
-                const signed_a: i32 = @bitCast(a);
-                result = @bitCast(signed_a >> @truncate(b));
-            },
-            else => result = 0,
-        }
+fn read_mem_u8(self: *SoC, addr: u32) u8 {
+    if (addr < RAM_SIZE) {
+        return self.data_memory[@intCast(addr)];
+    } else if (addr == 0xFFFF_0000) { // 키보드 입력
+        self.keyboard_ready = false;
+        return self.keyboard_buffer;
+    } else if (addr == 0xFFFF_0001) { // 키보드 상태
+        return if (self.keyboard_ready) 1 else 0;
+    } else {
+        @panic("Error: Invalid read_mem_u8, address out of range or unmapped");
     }
-    return result;
+}
+
+fn read_mem_u16(self: *SoC, addr: u32) u16 {
+    const lo = self.read_mem_u8(addr);
+    const hi = self.read_mem_u8(addr + 1);
+    return (@as(u16, lo) << 0) | (@as(u16, hi) << 8);
+}
+
+fn read_mem_u32(self: *SoC, addr: u32) u32 {
+    return (@as(u32, self.read_mem_u8(addr + 0)) << 0) |
+        (@as(u32, self.read_mem_u8(addr + 1)) << 8) |
+        (@as(u32, self.read_mem_u8(addr + 2)) << 16) |
+        (@as(u32, self.read_mem_u8(addr + 3)) << 24);
 }
 
 pub fn fetch(self: *SoC) u32 {
@@ -151,50 +109,33 @@ fn execR(self: *SoC, instr: u32) void {
     const rd = (instr >> 10) & 0b11111; // Rd
     const fn7 = ((instr >> 15) & 0b1111111); // fn7
     const fn3 = (instr >> 7) & 0b111; // fn3
-
-    self.regs[rd] = ALU(self, self.regs[rm], self.regs[rn], @truncate(fn3), @truncate(fn7));
+    //
+    const opcode = alu.decodeALUOpcode(@intCast(fn3), @intCast(fn7));
+    self.regs[rd] = alu.eval(self, opcode, self.regs[rm], self.regs[rn]);
 }
 
 fn execI(self: *SoC, instr: u32) void {
     const rm = (instr >> 27) & 0b11111;
-    const imm_raw = (instr >> 15) & 0xFFF; // 12-bit
-    const imm = signExtend12(imm_raw); // ← Sign-Extend
+    const imm_raw = (instr >> 15) & 0xFFF;
+    const imm = signExtend12(imm_raw);
     const rd = (instr >> 10) & 0b11111;
     const fn3 = (instr >> 7) & 0b111;
     const opcode = instr & 0b1111111;
 
     switch (opcode) {
         1 => { // ALU-immediate
-            self.regs[rd] = ALU(
-                self,
-                self.regs[rm],
-                @bitCast(imm), // Argument b is u32
-                @truncate(fn3),
-                0,
-            );
+            const alu_op = alu.decodeALUOpcode(@intCast(fn3), 0);
+            self.regs[rd] = alu.ALU(self, self.regs[rm], @bitCast(imm), alu_op);
         },
 
         9 => { // Load
             const addr_i32: i32 = @as(i32, @bitCast(self.regs[rm])) + imm;
-            const addr = wrapAddress(addr_i32);
 
             switch (fn3) {
-                0b000 => { // LW
-                    self.regs[rd] =
-                        (@as(u32, self.data_memory[addr + 0]) << 0) |
-                        (@as(u32, self.data_memory[addr + 1]) << 8) |
-                        (@as(u32, self.data_memory[addr + 2]) << 16) |
-                        (@as(u32, self.data_memory[addr + 3]) << 24);
-                },
-                0b001 => { // LH
-                    self.regs[rd] =
-                        (@as(u32, self.data_memory[addr + 0]) << 0) |
-                        (@as(u32, self.data_memory[addr + 1]) << 8);
-                },
-                0b011 => { // LB
-                    self.regs[rd] = self.data_memory[addr];
-                },
-                else => @panic("Invalid fn3 for I-Type Load"),
+                0b000 => self.regs[rd] = self.read_mem_u32(@bitCast(addr_i32)),
+                0b001 => self.regs[rd] = self.read_mem_u16(@bitCast(addr_i32)),
+                0b011 => self.regs[rd] = self.read_mem_u8(@bitCast(addr_i32)),
+                else => @panic("Invalid fn3 for Load"),
             }
         },
 
@@ -209,26 +150,14 @@ fn execS(self: *SoC, instr: u32) void {
     const imm = signExtend12(imm_raw);
     const fn3 = (instr >> 7) & 0b111;
 
-    const address: i32 = @as(i32, @bitCast(self.regs[rm])) + imm;
-    const sum_address = if (address < 0) DM_SIZE + address else address;
-    const wrapped_address: usize = @intCast(sum_address); // wtf???
+    const addr_i32: i32 = @as(i32, @bitCast(self.regs[rm])) + imm;
     const value = self.regs[rn];
 
     switch (fn3) {
-        0b000 => {
-            self.data_memory[wrapped_address + 0] = @truncate(value >> 0);
-            self.data_memory[wrapped_address + 1] = @truncate(value >> 8);
-            self.data_memory[wrapped_address + 2] = @truncate(value >> 16);
-            self.data_memory[wrapped_address + 3] = @truncate(value >> 24);
-        },
-        0b001 => {
-            self.data_memory[wrapped_address + 0] = @truncate(value >> 0);
-            self.data_memory[wrapped_address + 1] = @truncate(value >> 8);
-        },
-        0b011 => {
-            self.data_memory[wrapped_address] = @truncate(value >> 0);
-        },
-        else => @panic("Error: Invalid fn3 on S-Type Store instruction!\n"),
+        0b000 => self.write_mem_u32(@bitCast(addr_i32), value),
+        0b001 => self.write_mem_u16(@bitCast(addr_i32), value),
+        0b011 => self.write_mem_u8(@bitCast(addr_i32), value),
+        else => @panic("Invalid fn3 for Store"),
     }
 }
 
