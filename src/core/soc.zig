@@ -1,5 +1,10 @@
 const std = @import("std");
 const alu = @import("alu.zig");
+const regs = @import("registers.zig");
+
+pub const RAM_BASE: u32 = 0x0010_0000;
+pub const RAM_SIZE: u32 = 16 * 1024 * 1024;
+pub const RAM_END: u32 = RAM_BASE + RAM_SIZE;
 
 pub const DM_SIZE: u32 = 24 * 1024 * 1024;
 pub const IM_SIZE: u32 = 0x1000;
@@ -11,6 +16,9 @@ pub const SoC = struct {
     pc: u32,
     instruction_memory: [IM_SIZE]u8,
     data_memory: [DM_SIZE]u8,
+    irq: bool,
+    current_irq: u8,
+    int_vector: [256]u32,
 
     // Status register's flags
     pub const FLAG_EQ: u8 = 0b00000001;
@@ -32,14 +40,12 @@ fn signExtend12(x: u32) i32 {
 }
 
 fn write_mem_u8(self: *SoC, addr: u32, value: u8) void {
-    if (addr < RAM_SIZE) {
-        self.data_memory[@intCast(addr)] = value;
-    } else if (addr == 0xFFFF_0002) {
-        std.debug.print("{c}", .{value}); // TTY 출력
-    } else if (addr == 0xFFFF_0003) {
-        std.debug.print("\n[TTY: Clear screen command received]\n", .{});
+    if (addr >= RAM_BASE and addr < RAM_END) {
+        self.data_memory[@intCast(addr - RAM_BASE)] = value;
+    } else if (addr == 0x0000_0002) {
+        std.debug.print("{c}", .{value}); // TTY
     } else {
-        @panic("Invalid write_mem_u8: address out of range or unmapped");
+        @panic("Invalid address");
     }
 }
 
@@ -81,6 +87,8 @@ fn read_mem_u32(self: *SoC, addr: u32) u32 {
         (@as(u32, self.read_mem_u8(addr + 3)) << 24);
 }
 
+// ------------------------- Fetch & Decode & Execute -------------------------
+
 pub fn fetch(self: *SoC) u32 {
     var word: u32 = 0;
     word = (@as(u32, self.instruction_memory[self.pc + 0]) << 0) |
@@ -102,6 +110,8 @@ pub fn decode_and_execute(self: *SoC, instr: u32) void {
     }
     self.pc += 4;
 }
+
+// ------------------------- Instruction Execution -------------------------
 
 fn execR(self: *SoC, instr: u32) void {
     const rm = (instr >> 27) & 0b11111; // Rm
@@ -138,7 +148,6 @@ fn execI(self: *SoC, instr: u32) void {
                 else => @panic("Invalid fn3 for Load"),
             }
         },
-
         else => @panic("Invalid I-Type opcode"),
     }
 }
