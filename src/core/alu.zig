@@ -1,4 +1,4 @@
-const SoC = @import("soc.zig");
+const soc = @import("soc.zig");
 
 pub const ALU_OP = enum {
     add,
@@ -36,8 +36,8 @@ pub fn decodeALUOpcode(fn3: u3, fn7: u7) ALU_OP {
     }
 }
 
-pub fn ALU(self: *SoC.SoC, a: u32, b: u32, opcode: ALU_OP) ?u32 {
-    var result: u32 = 0;
+pub fn ALU(self: *soc.SoC, a: u32, b: u32, opcode: ALU_OP) ?u32 {
+    var result: ?u32 = 0;
 
     switch (opcode) {
         .add => {
@@ -46,9 +46,9 @@ pub fn ALU(self: *SoC.SoC, a: u32, b: u32, opcode: ALU_OP) ?u32 {
 
             // Carry detection
             if (sum[1] != 0) {
-                self.statusreg |= SoC.FLAG_C;
+                self.statusreg |= self.FLAG_C;
             } else {
-                self.statusreg &= ~SoC.FLAG_C;
+                self.statusreg &= ~self.FLAG_C;
             }
 
             // Overflow detection
@@ -58,9 +58,9 @@ pub fn ALU(self: *SoC.SoC, a: u32, b: u32, opcode: ALU_OP) ?u32 {
             if ((signed_a > 0 and signed_b > 0 and signed_result < 0) or
                 (signed_a < 0 and signed_b < 0 and signed_result >= 0))
             {
-                self.statusreg |= SoC.FLAG_V;
+                self.statusreg |= self.FLAG_V;
             } else {
-                self.statusreg &= ~SoC.FLAG_V;
+                self.statusreg &= ~self.FLAG_V;
             }
         },
         .sub => {
@@ -69,9 +69,9 @@ pub fn ALU(self: *SoC.SoC, a: u32, b: u32, opcode: ALU_OP) ?u32 {
 
             // Carry detection (borrow 발생)
             if (a < b) {
-                self.statusreg |= SoC.FLAG_C;
+                self.statusreg |= self.FLAG_C;
             } else {
-                self.statusreg &= ~SoC.FLAG_C;
+                self.statusreg &= ~self.FLAG_C;
             }
 
             // Overflow detection
@@ -81,9 +81,9 @@ pub fn ALU(self: *SoC.SoC, a: u32, b: u32, opcode: ALU_OP) ?u32 {
             if ((signed_a > 0 and signed_b < 0 and signed_result < 0) or
                 (signed_a < 0 and signed_b > 0 and signed_result >= 0))
             {
-                self.statusreg |= SoC.FLAG_V;
+                self.statusreg |= self.FLAG_V;
             } else {
-                self.statusreg &= ~SoC.FLAG_V;
+                self.statusreg &= ~self.FLAG_V;
             }
         },
         .or_op => result = a | b,
@@ -97,21 +97,21 @@ pub fn ALU(self: *SoC.SoC, a: u32, b: u32, opcode: ALU_OP) ?u32 {
         },
         .cmp => {
             if (a == b) {
-                self.statusreg |= SoC.FLAG_EQ;
+                self.statusreg |= self.FLAG_EQ;
             } else {
-                self.statusreg &= ~SoC.FLAG_EQ;
+                self.statusreg &= ~self.FLAG_EQ;
             }
 
             if (a > b) {
-                self.statusreg |= SoC.FLAG_GT;
+                self.statusreg |= self.FLAG_GT;
             } else {
-                self.statusreg &= ~SoC.FLAG_GT;
+                self.statusreg &= ~self.FLAG_GT;
             }
 
             if (a < b) {
-                self.statusreg |= SoC.FLAG_LT;
+                self.statusreg |= self.FLAG_LT;
             } else {
-                self.statusreg &= ~SoC.FLAG_LT;
+                self.statusreg &= ~self.FLAG_LT;
             }
 
             result = null;
