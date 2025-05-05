@@ -16,6 +16,7 @@ pub const RAM_END: u32 = RAM_BASE + RAM_SIZE;
 
 pub const INT_VECTOR_BASE: u32 = 0x00002000;
 pub const INT_VECTOR_ENTRY_SIZE: u32 = 1024;
+pub const MAX_IRQ: usize = 256;
 
 pub const SoC = struct {
     regs: [32]u32,
@@ -24,9 +25,11 @@ pub const SoC = struct {
     instruction_memory: [IM_SIZE]u8,
     data_memory: [DM_SIZE]u8,
     irq: bool,
+    irq_level: u8,
     current_irq: u8,
+    next_irq: u8,
     int_vector: [256]u32,
-    syscall_base: u8 = 0, // depends by OS devs
+    syscall_base: u8, // depends by OS devs
     halted: bool = false,
 
     // Status register's flags
@@ -38,6 +41,26 @@ pub const SoC = struct {
     pub const FLAG_INT: u8 = 0b00100000;
     pub const FLAG_SV: u8 = 0b11000000;
 };
+
+// irq priority table
+// Lesser number means higher priority
+pub var irq_priority_table: [MAX_IRQ]u8 = init_irq_priorities();
+
+fn init_irq_priorities() [MAX_IRQ]u8 {
+    var table: [MAX_IRQ]u8 = undefined;
+
+    // default values
+    for (table, 0..) |*val, i| {
+        val.* = @intCast(i);
+    }
+
+    // manually set IRQ priority if needed
+    // ex)
+    // table[1] = 0;
+    // table[2] = 1;
+
+    return table;
+}
 
 pub fn signExtend12(x: u32) i32 {
     // if 0x800th bit == 1, it's a negative number

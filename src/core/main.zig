@@ -53,14 +53,14 @@ fn parse_args(allocator: std.mem.Allocator) !Args {
 pub fn main() !void {
     const allocator = std.heap.page_allocator;
 
-    // 명령줄 인자 파싱
+    // Parse  command line argument
     const args = try parse_args(allocator);
 
-    // SoC 초기화
+    // SoC init
     var soc_main: SoC.SoC = SoC.SoC_create();
     SoC.SoC_init(&soc_main);
 
-    // 바이너리 프로그램 로딩
+    // Load binary
     try file.load_program(&soc_main, args.program_path.?);
 
     // PC override (if specified)
@@ -69,12 +69,12 @@ pub fn main() !void {
         std.debug.print("→ PC value is now 0x{x}\n", .{pc});
     }
 
-    // 디버그 출력
+    // Debug mode
     if (args.debug) {
         std.debug.print("Debug mod enabled.\n", .{});
     }
 
-    // 메모리 덤프
+    // Memory dump
     if (args.dump_mem) {
         std.debug.print("→ Memory dump (data_memory[0..16]):\n", .{});
         for (soc_main.data_memory[0..16], 0..) |b, idx| {
@@ -84,6 +84,6 @@ pub fn main() !void {
         std.debug.print("\n", .{});
     }
 
-    // 실행 시작
+    // Execute
     SoC.SoC_main(&soc_main);
 }

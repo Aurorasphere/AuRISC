@@ -39,35 +39,42 @@ fn restore_callee_registers(self: *soc.SoC) void {
 }
 
 pub fn int_call(self: *soc.SoC) void {
-    // If the current FLAG_INT == 0, return
-    if ((self.statusreg & soc.SoC.FLAG_INT) == 0) return;
+    if ((self.statusreg & self.FLAG_INT) == 0) return;
     if (!self.irq) return;
 
-    // Save callee-saved registers and status register
-    soc.save_callee_regs(self);
+    // Compare IRQ priority if already in interrupt
+    if (self.irq_level > 0) {
+        const curr_priority = soc.irq_priority_table[self.current_irq];
+        const new_priority = soc.irq_priority_table[self.next_irq];
 
-    // If the current mode is user mode, change the current mode to kernel mode
-    const curr_priv = (self.statusreg & soc.SoC.FLAG_SV) >> 6;
-    if (curr_priv == 0b11) {
+        if (new_priority <= curr_priority) {
+            return; // Ignore if the priority is lesser or equal
+        }
+    }
+
+    // Save current registers
+    save_callee_regs(self);
+
+    if (((self.statusreg & soc.SoC.FLAG_SV) >> 6) == 0b11) {
         self.statusreg = (self.statusreg & ~soc.SoC.FLAG_SV) | 0b0100_0000;
     }
 
-    // Current PC + 4 → link register
     self.regs[@intFromEnum(regs.Abbr.lr)] = self.pc + 4;
 
-    // 인터럽트 벡터로 이동
-    self.pc = self.interrupt_vector[self.current_irq];
+    // Update current IRQ
+    self.current_irq = self.next_irq;
+    self.irq_level += 1;
+    self.irq = false;
+
+    self.pc = self.int_vector[self.current_irq];
 }
 
 pub fn int_return(self: *soc.SoC) void {
-    // Restore Callee-saved and status register
     soc.restore_callee_regs(self);
-
-    // Restore PC from link register
     self.pc = self.regs[@intFromEnum(regs.Abbr.lr)];
-
-    // Restore interrupt flag
     self.statusreg |= soc.SoC.FLAG_INT;
+
+    if (self.irq_level > 0) self.irq_level -= 1;
 }
 
 pub fn syscall(self: *soc.SoC) void {
@@ -93,4 +100,28 @@ pub fn sysret(self: *soc.SoC) void {
 
 pub fn exec_hlt(self: *soc.SoC) void {
     self.halted = true;
+}
+
+pub fn execT(self: *soc.SoC, instr: u32) void {
+    const opcode = instr & 0b1111111;
+    const imm: u8 = (instr >> 16) & 0b11111111;
+    const fn3 = (instr >> 7) & 0b111;
+
+    if (opcode == 0b0000100) {
+        switch (fn3) {
+            0b000 => syscall(self),
+            0b001 => sysret(self),
+            0b010 => {
+                self.next_irq = imm;
+                self.irq = true;
+                int_call(self);
+            },
+            0b011 => int_return(self),
+            else => @panic("Error: Invalid T-Type fn3!"),
+        }
+    } else if (opcode == 0b1111111) {
+        exec_hlt(self);
+    } else {
+        @panic("Error: Invalid T-Type opcode!");
+    }
 }
