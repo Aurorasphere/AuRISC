@@ -1,5 +1,5 @@
-const soc = @import("soc.zig");
-const regs = @import("registers.zig");
+const soc = @import("../soc.zig");
+const regs = @import("../registers.zig");
 
 fn save_callee_regs(self: *soc.SoC) void {
     var sp: u32 = self.regs[regs.Abbr.sp]; // sp

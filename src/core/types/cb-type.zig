@@ -1,4 +1,4 @@
-const soc = @import("soc.zig");
+const soc = @import("../soc.zig");
 
 fn execCB(self: *soc.SoC, instr: u32) void {
     const rmd = (instr >> 27) & 0b11111;

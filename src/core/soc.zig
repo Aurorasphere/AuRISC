@@ -31,7 +31,8 @@ pub const SoC = struct {
     int_vector: [256]u32,
     syscall_base: u8, // depends by OS devs
     halted: bool = false,
-
+    keyboard_ready: bool = false,
+    keyboard_buffer: u8 = 0,
     // Status register's flags
     pub const FLAG_EQ: u8 = 0b00000001;
     pub const FLAG_GT: u8 = 0b00000010;
@@ -49,9 +50,8 @@ pub var irq_priority_table: [MAX_IRQ]u8 = init_irq_priorities();
 fn init_irq_priorities() [MAX_IRQ]u8 {
     var table: [MAX_IRQ]u8 = undefined;
 
-    // default values
-    for (table, 0..) |*val, i| {
-        val.* = @intCast(i);
+    inline for (0..MAX_IRQ) |i| {
+        table[i] = @intCast(i);
     }
 
     // manually set IRQ priority if needed
@@ -153,31 +153,37 @@ pub fn SoC_init(self: *SoC) void {
     self.data_memory = [_]u8{0} ** DM_SIZE;
     self.irq = false;
     self.current_irq = 0;
+    self.next_irq = 0;
+    self.syscall_base = 0;
+    self.halted = false;
     for (self.int_vector, 0..) |*vec, i| {
-        vec.* = INT_VECTOR_BASE + i * INT_VECTOR_ENTRY_SIZE;
+        vec.* = INT_VECTOR_BASE + @as(u32, i) * INT_VECTOR_ENTRY_SIZE;
     }
 }
 
 pub fn SoC_create() SoC {
-    const soc = SoC{
-        .regs = [_]u32{0} ** 32,
-        .statusreg = 0,
-        .pc = 0,
-        .instruction_memory = [_]u8{0} ** IM_SIZE,
-        .data_memory = [_]u8{0} ** DM_SIZE,
-        .irq = false,
-        .current_irq = 0,
-        .int_vector = undefined,
-        .syscall_base = 0,
-    };
-    for (soc.int_vector, 0..) |*vec, i| {
-        vec.* = INT_VECTOR_BASE + i * INT_VECTOR_ENTRY_SIZE;
+    var soc: SoC = undefined;
+
+    soc.regs = [_]u32{0} ** 32;
+    soc.statusreg = 0;
+    soc.pc = 0;
+    soc.instruction_memory = [_]u8{0} ** IM_SIZE;
+    soc.data_memory = [_]u8{0} ** DM_SIZE;
+    soc.irq = false;
+    soc.irq_level = 0;
+    soc.current_irq = 0;
+    soc.next_irq = 0;
+    soc.syscall_base = 0;
+    soc.halted = false;
+
+    for (&soc.int_vector, 0..) |*vec, i| {
+        vec.* = INT_VECTOR_BASE + @as(u32, i) * INT_VECTOR_ENTRY_SIZE;
     }
+
     return soc;
 }
 
 pub fn SoC_main(self: *SoC) void {
-    SoC_init(self);
     while (true) {
         if (self.halted) {
             // if interrupt occurs, wake cpu from halt

@@ -1,4 +1,4 @@
-const soc = @import("soc.zig");
+const soc = @import("../soc.zig");
 
 pub fn execS(self: *soc.SoC, instr: u32) void {
     const rm = (instr >> 27) & 0b11111;
