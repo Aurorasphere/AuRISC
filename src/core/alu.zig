@@ -1,16 +1,34 @@
 const soc = @import("soc.zig");
 
 pub const ALU_OP = enum {
-    add,
-    sub,
-    or_op,
-    and_op,
-    xor,
-    lsl,
-    lsr,
-    asr,
-    cmp,
+    add, // Addition
+    sub, // Subtraction
+    or_op, // Bitwise OR
+    and_op, // Bitwise AND
+    xor, // Bitwise XOR
+    lsl, // Logical left shift
+    lsr, // Logical right shift
+    asr, // Arithmetic right shift
+    cmp, // Compare
     invalid,
+    // M-Extension: Multiply and Divide
+    mul, // Multiply
+    mulu, // Unsigned multiply
+    div, // Divide
+    divu, // Unsigned divide
+    rem, // Remainder
+    remu, // Unsigned remainder
+    // F-Extension: Floating point extensions
+    fadd, // Floating point addition
+    fsub, // Floating point subtraction
+    fmul, // Floating point multilication
+    fdiv, // Floating point division
+    fsqrt, // Floating point square root
+    fcmp, // Floating point compare
+    ftint, // Floating point to Signed integer
+    ftuint, // Floating point to Unsigned interger
+    fmvi, // Move Floating point bit to integer
+    imvf, // Move integer bit to floating point
 };
 
 pub fn decodeALUOpcode(fn3: u3, fn7: u7) ALU_OP {
@@ -46,9 +64,9 @@ pub fn ALU(self: *soc.SoC, a: u32, b: u32, opcode: ALU_OP) u32 {
 
             // Carry detection
             if (sum[1] != 0) {
-                self.statusreg |= soc.SoC.FLAG_C;
+                self.statusreg |= soc.FLAG_C;
             } else {
-                self.statusreg &= ~soc.SoC.FLAG_C;
+                self.statusreg &= ~soc.FLAG_C;
             }
 
             // Overflow detection
@@ -58,9 +76,9 @@ pub fn ALU(self: *soc.SoC, a: u32, b: u32, opcode: ALU_OP) u32 {
             if ((signed_a > 0 and signed_b > 0 and signed_result < 0) or
                 (signed_a < 0 and signed_b < 0 and signed_result >= 0))
             {
-                self.statusreg |= soc.SoC.FLAG_V;
+                self.statusreg |= soc.FLAG_V;
             } else {
-                self.statusreg &= ~soc.SoC.FLAG_V;
+                self.statusreg &= ~soc.FLAG_V;
             }
         },
         .sub => {
@@ -69,9 +87,9 @@ pub fn ALU(self: *soc.SoC, a: u32, b: u32, opcode: ALU_OP) u32 {
 
             // Carry detection (borrow 발생)
             if (a < b) {
-                self.statusreg |= soc.SoC.FLAG_C;
+                self.statusreg |= soc.FLAG_C;
             } else {
-                self.statusreg &= ~soc.SoC.FLAG_C;
+                self.statusreg &= ~soc.FLAG_C;
             }
 
             // Overflow detection
@@ -81,9 +99,9 @@ pub fn ALU(self: *soc.SoC, a: u32, b: u32, opcode: ALU_OP) u32 {
             if ((signed_a > 0 and signed_b < 0 and signed_result < 0) or
                 (signed_a < 0 and signed_b > 0 and signed_result >= 0))
             {
-                self.statusreg |= soc.SoC.FLAG_V;
+                self.statusreg |= soc.FLAG_V;
             } else {
-                self.statusreg &= ~soc.SoC.FLAG_V;
+                self.statusreg &= ~soc.FLAG_V;
             }
         },
         .or_op => result = a | b,
@@ -97,21 +115,21 @@ pub fn ALU(self: *soc.SoC, a: u32, b: u32, opcode: ALU_OP) u32 {
         },
         .cmp => {
             if (a == b) {
-                self.statusreg |= soc.SoC.FLAG_EQ;
+                self.statusreg |= soc.FLAG_EQ;
             } else {
-                self.statusreg &= ~soc.SoC.FLAG_EQ;
+                self.statusreg &= ~soc.FLAG_EQ;
             }
 
             if (a > b) {
-                self.statusreg |= soc.SoC.FLAG_GT;
+                self.statusreg |= soc.FLAG_GT;
             } else {
-                self.statusreg &= ~soc.SoC.FLAG_GT;
+                self.statusreg &= ~soc.FLAG_GT;
             }
 
             if (a < b) {
-                self.statusreg |= soc.SoC.FLAG_LT;
+                self.statusreg |= soc.FLAG_LT;
             } else {
-                self.statusreg &= ~soc.SoC.FLAG_LT;
+                self.statusreg &= ~soc.FLAG_LT;
             }
         },
         .invalid => result = 0,

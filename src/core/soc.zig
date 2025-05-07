@@ -1,14 +1,14 @@
 const std = @import("std");
 const alu = @import("alu.zig");
 const regs = @import("registers.zig");
-const r_type = @import("types/r-type.zig");
-const i_type = @import("types/i-type.zig");
-const s_type = @import("types/s-type.zig");
-const cb_type = @import("types/cb-type.zig");
-const t_type = @import("types/t-type.zig");
+const r_type = @import("fmts/r-type.zig");
+const i_type = @import("fmts/i-type.zig");
+const s_type = @import("fmts/s-type.zig");
+const cb_type = @import("fmts/cb-type.zig");
+const t_type = @import("fmts/t-type.zig");
 
-pub const DM_SIZE: u32 = 24 * 1024 * 1024;
-pub const IM_SIZE: u32 = 16 * 1024 * 1024;
+pub const DM_SIZE: u32 = 0x1000;
+pub const IM_SIZE: u32 = 0x1000;
 
 pub const RAM_BASE: u32 = 0x0010_0000;
 pub const RAM_SIZE: u32 = 16 * 1024 * 1024;
@@ -17,6 +17,14 @@ pub const RAM_END: u32 = RAM_BASE + RAM_SIZE;
 pub const INT_VECTOR_BASE: u32 = 0x00002000;
 pub const INT_VECTOR_ENTRY_SIZE: u32 = 1024;
 pub const MAX_IRQ: usize = 256;
+
+pub const FLAG_EQ: u8 = 0b00000001;
+pub const FLAG_GT: u8 = 0b00000010;
+pub const FLAG_LT: u8 = 0b00000100;
+pub const FLAG_V: u8 = 0b00001000;
+pub const FLAG_C: u8 = 0b00010000;
+pub const FLAG_INT: u8 = 0b00100000;
+pub const FLAG_SV: u8 = 0b11000000;
 
 pub const SoC = struct {
     regs: [32]u32,
@@ -33,14 +41,6 @@ pub const SoC = struct {
     halted: bool = false,
     keyboard_ready: bool = false,
     keyboard_buffer: u8 = 0,
-    // Status register's flags
-    pub const FLAG_EQ: u8 = 0b00000001;
-    pub const FLAG_GT: u8 = 0b00000010;
-    pub const FLAG_LT: u8 = 0b00000100;
-    pub const FLAG_V: u8 = 0b00001000;
-    pub const FLAG_C: u8 = 0b00010000;
-    pub const FLAG_INT: u8 = 0b00100000;
-    pub const FLAG_SV: u8 = 0b11000000;
 };
 
 // irq priority table
@@ -53,11 +53,6 @@ fn init_irq_priorities() [MAX_IRQ]u8 {
     inline for (0..MAX_IRQ) |i| {
         table[i] = @intCast(i);
     }
-
-    // manually set IRQ priority if needed
-    // ex)
-    // table[1] = 0;
-    // table[2] = 1;
 
     return table;
 }
@@ -152,35 +147,17 @@ pub fn SoC_init(self: *SoC) void {
     self.instruction_memory = [_]u8{0} ** IM_SIZE;
     self.data_memory = [_]u8{0} ** DM_SIZE;
     self.irq = false;
+    self.irq_level = 0;
     self.current_irq = 0;
     self.next_irq = 0;
     self.syscall_base = 0;
     self.halted = false;
-    for (self.int_vector, 0..) |*vec, i| {
-        vec.* = INT_VECTOR_BASE + @as(u32, i) * INT_VECTOR_ENTRY_SIZE;
+    self.keyboard_ready = false;
+    self.keyboard_buffer = 0;
+
+    for (self.int_vector[0..], 0..) |*vec, i| {
+        vec.* = INT_VECTOR_BASE + @as(u32, @intCast(i)) * INT_VECTOR_ENTRY_SIZE;
     }
-}
-
-pub fn SoC_create() SoC {
-    var soc: SoC = undefined;
-
-    soc.regs = [_]u32{0} ** 32;
-    soc.statusreg = 0;
-    soc.pc = 0;
-    soc.instruction_memory = [_]u8{0} ** IM_SIZE;
-    soc.data_memory = [_]u8{0} ** DM_SIZE;
-    soc.irq = false;
-    soc.irq_level = 0;
-    soc.current_irq = 0;
-    soc.next_irq = 0;
-    soc.syscall_base = 0;
-    soc.halted = false;
-
-    for (&soc.int_vector, 0..) |*vec, i| {
-        vec.* = INT_VECTOR_BASE + @as(u32, i) * INT_VECTOR_ENTRY_SIZE;
-    }
-
-    return soc;
 }
 
 pub fn SoC_main(self: *SoC) void {

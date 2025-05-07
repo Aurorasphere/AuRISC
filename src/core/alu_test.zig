@@ -1,52 +1,85 @@
 const std = @import("std");
 const testing = std.testing;
 const alu = @import("alu.zig");
-const soc = @import("soc.zig");
+const soc_mod = @import("soc.zig");
+const SoC = soc_mod.SoC;
 
-const SoC = soc.SoC;
+test "ALU: add" {
+    var cpu: SoC = undefined;
+    soc_mod.SoC_init(&cpu);
 
-// ALU 연산 결과 및 플래그 테스트
-test "ALU add operation sets result and flags correctly" {
-    var cpu = soc.SoC_create();
-    const a: u32 = 10;
-    const b: u32 = 20;
-
-    const result: u32 = alu.ALU(&cpu, a, b, .add);
-    try testing.expectEqual(result, 30);
-    try testing.expect((cpu.statusreg & SoC.FLAG_C) == 0);
-    try testing.expect((cpu.statusreg & SoC.FLAG_V) == 0);
+    const result = alu.ALU(&cpu, 40, 30, .add);
+    try testing.expectEqual(@as(u32, 70), result);
 }
 
-test "ALU sub operation sets result and carry flag correctly" {
-    var cpu = soc.SoC_create();
-    const a: u32 = 10;
-    const b: u32 = 20;
+test "ALU: add with carry/overflow flags" {
+    var cpu: SoC = undefined;
+    soc_mod.SoC_init(&cpu);
 
-    const result: u32 = alu.ALU(&cpu, a, b, .sub);
-    try testing.expectEqual(result, @as(u32, 0xFFFFFFF6)); // -10 in two's complement
-    try testing.expect((cpu.statusreg & SoC.FLAG_C) != 0);
+    const result = alu.ALU(&cpu, 0xFFFF_FFF6, 20, .add);
+    try testing.expectEqual(@as(u32, 0xA), result);
+    try testing.expect((cpu.statusreg & soc_mod.FLAG_C) != 0);
+    try testing.expect((cpu.statusreg & soc_mod.FLAG_V) == 0);
 }
 
-test "ALU cmp operation sets correct flags for a > b" {
-    var cpu = soc.SoC_create();
-    _ = alu.ALU(&cpu, 123, 100, .cmp);
-    try testing.expect((cpu.statusreg & SoC.FLAG_GT) != 0);
-    try testing.expect((cpu.statusreg & SoC.FLAG_EQ) == 0);
-    try testing.expect((cpu.statusreg & SoC.FLAG_LT) == 0);
+test "ALU: sub" {
+    var cpu: SoC = undefined;
+    soc_mod.SoC_init(&cpu);
+
+    const result = alu.ALU(&cpu, 30, 20, .sub);
+    try testing.expectEqual(@as(u32, 10), result);
+    try testing.expect((cpu.statusreg & soc_mod.FLAG_C) == 0); // borrow occurred
 }
 
-test "ALU cmp operation sets correct flags for a == b" {
-    var cpu = soc.SoC_create();
-    _ = alu.ALU(&cpu, 200, 200, .cmp);
-    try testing.expect((cpu.statusreg & SoC.FLAG_EQ) != 0);
-    try testing.expect((cpu.statusreg & SoC.FLAG_GT) == 0);
-    try testing.expect((cpu.statusreg & SoC.FLAG_LT) == 0);
+test "ALU: sub with carry flag on borrow" {
+    var cpu: SoC = undefined;
+    soc_mod.SoC_init(&cpu);
+
+    const result = alu.ALU(&cpu, 10, 20, .sub);
+    try testing.expectEqual(@as(u32, 0xFFFF_FFF6), result);
+    try testing.expect((cpu.statusreg & soc_mod.FLAG_C) != 0); // borrow occurred
 }
 
-test "ALU cmp operation sets correct flags for a < b" {
-    var cpu = soc.SoC_create();
+test "ALU: or" {
+    var cpu: SoC = undefined;
+    soc_mod.SoC_init(&cpu);
+
+    const result = alu.ALU(&cpu, 0b01010101, 0b10101010, .or_op);
+    try testing.expectEqual(@as(u32, 0b1111_1111), result);
+}
+
+test "ALU: and" {
+    var cpu: SoC = undefined;
+    soc_mod.SoC_init(&cpu);
+
+    const result = alu.ALU(&cpu, 0b1010, 0b0011, .and_op);
+    try testing.expectEqual(@as(u32, 0b0010), result);
+}
+
+test "ALU: xor" {
+    var cpu: SoC = undefined;
+    soc_mod.SoC_init(&cpu);
+
+    const result = alu.ALU(&cpu, 0b1010, 0b0011, .xor);
+    try testing.expectEqual(@as(u32, 0b1001), result);
+}
+
+test "ALU cmp operation sets EQ, GT, LT flags properly" {
+    var cpu: SoC = undefined;
+    soc_mod.SoC_init(&cpu);
+
+    _ = alu.ALU(&cpu, 123, 123, .cmp);
+    try testing.expect((cpu.statusreg & soc_mod.FLAG_EQ) != 0);
+    try testing.expect((cpu.statusreg & soc_mod.FLAG_GT) == 0);
+    try testing.expect((cpu.statusreg & soc_mod.FLAG_LT) == 0);
+
+    _ = alu.ALU(&cpu, 200, 100, .cmp);
+    try testing.expect((cpu.statusreg & soc_mod.FLAG_EQ) == 0);
+    try testing.expect((cpu.statusreg & soc_mod.FLAG_GT) != 0);
+    try testing.expect((cpu.statusreg & soc_mod.FLAG_LT) == 0);
+
     _ = alu.ALU(&cpu, 50, 100, .cmp);
-    try testing.expect((cpu.statusreg & SoC.FLAG_LT) != 0);
-    try testing.expect((cpu.statusreg & SoC.FLAG_EQ) == 0);
-    try testing.expect((cpu.statusreg & SoC.FLAG_GT) == 0);
+    try testing.expect((cpu.statusreg & soc_mod.FLAG_EQ) == 0);
+    try testing.expect((cpu.statusreg & soc_mod.FLAG_GT) == 0);
+    try testing.expect((cpu.statusreg & soc_mod.FLAG_LT) != 0);
 }
