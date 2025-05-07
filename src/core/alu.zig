@@ -32,9 +32,10 @@ pub const ALU_OP = enum {
 };
 
 pub fn decodeALUOpcode(fn3: u3, fn7: u7) ALU_OP {
-    const fn7_masked = (fn7 & 0b1) != 0;
+    const M_EXT = 0b0010_0000;
+    const F_EXT = 0b0100_0000;
 
-    if (!fn7_masked) {
+    if (fn7 & M_EXT == 0 and fn7 & F_EXT == 0) {
         return switch (fn3) {
             0b000 => .add,
             0b001 => .or_op,

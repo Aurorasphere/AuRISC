@@ -39,8 +39,6 @@ pub const SoC = struct {
     int_vector: [256]u32,
     syscall_base: u8, // depends by OS devs
     halted: bool = false,
-    keyboard_ready: bool = false,
-    keyboard_buffer: u8 = 0,
 };
 
 // irq priority table
@@ -91,11 +89,9 @@ pub fn write_mem_u32(self: *SoC, addr: u32, value: u32) void {
 pub fn read_mem_u8(self: *SoC, addr: u32) u8 {
     if (addr >= RAM_BASE and addr < RAM_END) {
         return self.data_memory[@intCast(addr - RAM_BASE)];
-    } else if (addr == 0xFFFF_0000) { // 키보드 입력
+    } else if (addr == 0xFFFF_0000) { // 0xFFFF_0000 - 0xFFFF_FFFF is MMIO Sector
         self.keyboard_ready = false;
         return self.keyboard_buffer;
-    } else if (addr == 0xFFFF_0001) { // 키보드 상태
-        return if (self.keyboard_ready) 1 else 0;
     } else {
         @panic("Error: Invalid read_mem_u8, address out of range or unmapped");
     }
@@ -152,9 +148,6 @@ pub fn SoC_init(self: *SoC) void {
     self.next_irq = 0;
     self.syscall_base = 0;
     self.halted = false;
-    self.keyboard_ready = false;
-    self.keyboard_buffer = 0;
-
     for (self.int_vector[0..], 0..) |*vec, i| {
         vec.* = INT_VECTOR_BASE + @as(u32, @intCast(i)) * INT_VECTOR_ENTRY_SIZE;
     }

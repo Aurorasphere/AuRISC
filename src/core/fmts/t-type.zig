@@ -75,6 +75,7 @@ pub fn int_return(self: *soc.SoC) void {
     self.statusreg |= soc.SoC.FLAG_INT;
 
     if (self.irq_level > 0) self.irq_level -= 1;
+    self.statusreg = (self.statusreg & ~soc.SoC.FLAG_SV) | 0b1100_0000;
 }
 
 pub fn syscall(self: *soc.SoC) void {
