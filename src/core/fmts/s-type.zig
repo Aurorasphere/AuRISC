@@ -11,9 +11,9 @@ pub fn execS(self: *soc.SoC, instr: u32) void {
     const value = self.regs[rn];
 
     switch (fn3) {
-        0b000 => self.write_mem_u32(@bitCast(addr_i32), value),
-        0b001 => self.write_mem_u16(@bitCast(addr_i32), value),
-        0b011 => self.write_mem_u8(@bitCast(addr_i32), value),
+        0b000 => soc.write_mem_u32(self, @bitCast(addr_i32), value),
+        0b001 => soc.write_mem_u16(self, @bitCast(addr_i32), @intCast(value)),
+        0b011 => soc.write_mem_u8(self, @bitCast(addr_i32), @intCast(value)),
         else => @panic("Invalid fn3 for Store"),
     }
 }

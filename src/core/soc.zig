@@ -1,6 +1,7 @@
 const std = @import("std");
 const alu = @import("alu.zig");
 const regs = @import("registers.zig");
+const memmap = @import("memory_map.zig");
 const r_type = @import("fmts/r-type.zig");
 const i_type = @import("fmts/i-type.zig");
 const s_type = @import("fmts/s-type.zig");
@@ -10,12 +11,6 @@ const t_type = @import("fmts/t-type.zig");
 pub const DM_SIZE: u32 = 0x1000;
 pub const IM_SIZE: u32 = 0x1000;
 
-pub const RAM_BASE: u32 = 0x0010_0000;
-pub const RAM_SIZE: u32 = 16 * 1024 * 1024;
-pub const RAM_END: u32 = RAM_BASE + RAM_SIZE;
-
-pub const INT_VECTOR_BASE: u32 = 0x00002000;
-pub const INT_VECTOR_ENTRY_SIZE: u32 = 1024;
 pub const MAX_IRQ: usize = 256;
 
 pub const FLAG_EQ: u8 = 0b00000001;
@@ -37,7 +32,6 @@ pub const SoC = struct {
     current_irq: u8,
     next_irq: u8,
     int_vector: [256]u32,
-    syscall_base: u8, // depends by OS devs
     halted: bool = false,
 };
 
@@ -65,49 +59,44 @@ pub fn signExtend12(x: u32) i32 {
 }
 
 pub fn write_mem_u8(self: *SoC, addr: u32, value: u8) void {
-    if (addr >= RAM_BASE and addr < RAM_END) {
-        self.data_memory[@intCast(addr - RAM_BASE)] = value;
-    } else if (addr == 0x0000_0002) {
-        std.debug.print("{c}", .{value}); // TTY
+    if (memmap.is_valid_memory(addr)) {
+        self.data_memory[@intCast(addr - memmap.DATA_MEM_SECTOR_START)] = value;
     } else {
         @panic("Invalid address");
     }
 }
 
 pub fn write_mem_u16(self: *SoC, addr: u32, value: u16) void {
-    self.write_mem_u8(addr, @truncate(value >> 0));
-    self.write_mem_u8(addr + 1, @truncate(value >> 8));
+    write_mem_u8(self, addr, @truncate(value >> 0));
+    write_mem_u8(self, addr + 1, @truncate(value >> 8));
 }
 
 pub fn write_mem_u32(self: *SoC, addr: u32, value: u32) void {
-    self.write_mem_u8(addr, @truncate(value >> 0));
-    self.write_mem_u8(addr + 1, @truncate(value >> 8));
-    self.write_mem_u8(addr + 2, @truncate(value >> 16));
-    self.write_mem_u8(addr + 3, @truncate(value >> 24));
+    write_mem_u8(self, addr, @truncate(value >> 0));
+    write_mem_u8(self, addr + 1, @truncate(value >> 8));
+    write_mem_u8(self, addr + 2, @truncate(value >> 16));
+    write_mem_u8(self, addr + 3, @truncate(value >> 24));
 }
 
 pub fn read_mem_u8(self: *SoC, addr: u32) u8 {
-    if (addr >= RAM_BASE and addr < RAM_END) {
-        return self.data_memory[@intCast(addr - RAM_BASE)];
-    } else if (addr == 0xFFFF_0000) { // 0xFFFF_0000 - 0xFFFF_FFFF is MMIO Sector
-        self.keyboard_ready = false;
-        return self.keyboard_buffer;
+    if (memmap.is_valid_memory(addr)) {
+        return self.data_memory[@intCast(addr - memmap.DATA_MEM_SECTOR_START)];
     } else {
         @panic("Error: Invalid read_mem_u8, address out of range or unmapped");
     }
 }
 
 pub fn read_mem_u16(self: *SoC, addr: u32) u16 {
-    const lo = self.read_mem_u8(addr);
-    const hi = self.read_mem_u8(addr + 1);
+    const lo = read_mem_u8(self, addr);
+    const hi = read_mem_u8(self, addr + 1);
     return (@as(u16, lo) << 0) | (@as(u16, hi) << 8);
 }
 
 pub fn read_mem_u32(self: *SoC, addr: u32) u32 {
-    return (@as(u32, self.read_mem_u8(addr + 0)) << 0) |
-        (@as(u32, self.read_mem_u8(addr + 1)) << 8) |
-        (@as(u32, self.read_mem_u8(addr + 2)) << 16) |
-        (@as(u32, self.read_mem_u8(addr + 3)) << 24);
+    return (@as(u32, read_mem_u8(self, addr + 0)) << 0) |
+        (@as(u32, read_mem_u8(self, addr + 1)) << 8) |
+        (@as(u32, read_mem_u8(self, addr + 2)) << 16) |
+        (@as(u32, read_mem_u8(self, addr + 3)) << 24);
 }
 
 // ------------------------- Fetch & Decode & Execute -------------------------
@@ -146,10 +135,9 @@ pub fn SoC_init(self: *SoC) void {
     self.irq_level = 0;
     self.current_irq = 0;
     self.next_irq = 0;
-    self.syscall_base = 0;
     self.halted = false;
     for (self.int_vector[0..], 0..) |*vec, i| {
-        vec.* = INT_VECTOR_BASE + @as(u32, @intCast(i)) * INT_VECTOR_ENTRY_SIZE;
+        vec.* = memmap.INTERRUPT_VECTOR_START + @as(u32, @intCast(i)) * memmap.INT_VECTOR_ENTRY_SIZE;
     }
 }
 

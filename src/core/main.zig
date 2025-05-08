@@ -1,6 +1,5 @@
 const std = @import("std");
 const SoC = @import("soc.zig");
-const file = @import("file_handling.zig");
 
 const Args = struct {
     program_path: ?[]const u8 = null,
@@ -57,11 +56,8 @@ pub fn main() !void {
     const args = try parse_args(allocator);
 
     // SoC init
-    var soc_main: SoC.SoC = SoC.SoC_create();
+    var soc_main: SoC.SoC = undefined;
     SoC.SoC_init(&soc_main);
-
-    // Load binary
-    try file.load_program(&soc_main, args.program_path.?);
 
     // PC override (if specified)
     if (args.pc_override) |pc| {

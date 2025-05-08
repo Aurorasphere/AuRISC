@@ -13,11 +13,11 @@ pub const ALU_OP = enum {
     invalid,
     // M-Extension: Multiply and Divide
     mul, // Multiply
-    mulu, // Unsigned multiply
+    umul, // Unsigned multiply
     div, // Divide
-    divu, // Unsigned divide
+    udiv, // Unsigned divide
     rem, // Remainder
-    remu, // Unsigned remainder
+    urem, // Unsigned remainder
     // F-Extension: Floating point extensions
     fadd, // Floating point addition
     fsub, // Floating point subtraction
@@ -31,28 +31,71 @@ pub const ALU_OP = enum {
     imvf, // Move integer bit to floating point
 };
 
-pub fn decodeALUOpcode(fn3: u3, fn7: u7) ALU_OP {
-    const M_EXT = 0b0010_0000;
-    const F_EXT = 0b0100_0000;
+const M_EXT = 0b001_0000;
+const F_EXT = 0b010_0000;
 
-    if (fn7 & M_EXT == 0 and fn7 & F_EXT == 0) {
-        return switch (fn3) {
-            0b000 => .add,
-            0b001 => .or_op,
-            0b010 => .and_op,
-            0b011 => .xor,
-            0b100 => .lsl,
-            0b101 => .lsr,
-            0b110 => .cmp,
-            else => .invalid,
-        };
-    } else {
-        return switch (fn3) {
-            0b000 => .sub,
-            0b101 => .asr,
-            else => .invalid,
-        };
+pub fn decodeALUOpcode(fn3: u3, fn7: u7) ALU_OP {
+    if (fn7 == 0b0000000) {
+        switch (fn3) {
+            0b000 => return .add,
+            0b001 => return .or_op,
+            0b010 => return .and_op,
+            0b011 => return .xor,
+            0b100 => return .lsl,
+            0b101 => return .lsr,
+            0b110 => return .cmp,
+            else => return .invalid,
+        }
+    } else if (fn7 == 0b0000001) {
+        switch (fn3) {
+            0b000 => return .sub,
+            0b101 => return .asr,
+            else => return .invalid,
+        }
+    } else if ((fn7 & M_EXT) != 0) {
+        switch (fn3) {
+            0b000 => return .mul,
+            0b001 => return .umul,
+            0b010 => return .div,
+            0b011 => return .udiv,
+            0b100 => return .rem,
+            0b101 => return .urem,
+            else => return .invalid,
+        }
+    } else if ((fn7 & F_EXT) != 0 and (fn7 & 0b0001111) == 0) {
+        switch (fn3) {
+            0b000 => return .fadd,
+            0b001 => return .fsub,
+            0b010 => return .fmul,
+            0b011 => return .fdiv,
+            0b100 => return .fsqrt,
+            0b101 => return .fcmp,
+            else => return .invalid,
+        }
+    } else if ((fn7 & F_EXT) != 0 and (fn7 & 0b0001111) == 1) {
+        switch (fn3) {
+            0b000 => return .ftint,
+            0b001 => return .ftuint,
+            0b010 => return .fmvi,
+            0b011 => return .imvf,
+            else => return .invalid,
+        }
     }
+}
+
+fn mext_operation(a: u32, b: u32, opcode: ALU_OP) u32 {
+    var result: u32 = 0;
+    switch (opcode) {
+        .mul => result = @as(i32, a * b),
+        .mulu => result = a * b,
+        .div => result = @as(i32, a / b),
+        .divu => result = a / b,
+        .rem => result = @as(i32, a % b),
+        .remu => result = a % b,
+        else => return 0,
+    }
+
+    return result;
 }
 
 pub fn ALU(self: *soc.SoC, a: u32, b: u32, opcode: ALU_OP) u32 {
@@ -133,7 +176,7 @@ pub fn ALU(self: *soc.SoC, a: u32, b: u32, opcode: ALU_OP) u32 {
                 self.statusreg &= ~soc.FLAG_LT;
             }
         },
-        .invalid => result = 0,
+        else => result = 0,
     }
     return result;
 }

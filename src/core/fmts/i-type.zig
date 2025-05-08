@@ -13,18 +13,16 @@ pub fn execI(self: *soc.SoC, instr: u32) void {
         1 => { // ALU-immediate
             const alu_op = alu.decodeALUOpcode(@intCast(fn3), 0);
             const result = alu.ALU(self, self.regs[rm], @bitCast(imm), alu_op);
-            if (result) |value| {
-                self.regs[rd] = value;
-            }
+            self.regs[rd] = result;
         },
 
         9 => { // Load
             const addr_i32: i32 = @as(i32, @bitCast(self.regs[rm])) + imm;
 
             switch (fn3) {
-                0b000 => self.regs[rd] = soc.read_mem_u32(@bitCast(addr_i32)),
-                0b001 => self.regs[rd] = soc.read_mem_u16(@bitCast(addr_i32)),
-                0b011 => self.regs[rd] = soc.read_mem_u8(@bitCast(addr_i32)),
+                0b000 => self.regs[rd] = soc.read_mem_u32(self, @bitCast(addr_i32)),
+                0b001 => self.regs[rd] = soc.read_mem_u16(self, @bitCast(addr_i32)),
+                0b011 => self.regs[rd] = soc.read_mem_u8(self, @bitCast(addr_i32)),
                 else => @panic("Invalid fn3 for Load"),
             }
         },

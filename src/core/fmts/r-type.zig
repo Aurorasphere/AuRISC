@@ -11,7 +11,5 @@ pub fn execR(self: *soc.SoC, instr: u32) void {
     const opcode = alu.decodeALUOpcode(@intCast(fn3), @intCast(fn7));
 
     const result = alu.ALU(self, self.regs[rm], self.regs[rn], opcode);
-    if (result) |value| {
-        self.regs[rd] = value;
-    }
+    self.regs[rd] = result;
 }

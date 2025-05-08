@@ -5,12 +5,12 @@ fn save_callee_regs(self: *soc.SoC) void {
     var sp: u32 = self.regs[regs.Abbr.sp]; // sp
 
     sp -= 1;
-    soc.write_mem_u8(sp, self.statusreg);
+    soc.write_mem_u8(self, sp, self.statusreg);
 
     inline for (regs.Registers, 0..) |info, i| {
         if (info.saver == .Callee or info.abbr == regs.Abbr.lr) {
             sp -= 4;
-            self.write_mem_u32(sp, self.regs[i]);
+            self.write_mem_u32(self, sp, self.regs[i]);
         }
     }
     self.regs[@intFromEnum(regs.Abbr.sp)] = sp;
@@ -26,20 +26,20 @@ fn restore_callee_registers(self: *soc.SoC) void {
         idx -= 1;
         const info = regs.Registers[idx];
         if (info.saver == .Callee or info.abbr == regs.Abbr.lr) {
-            self.regs[idx] = self.read_mem_u32(sp);
+            self.regs[idx] = self.read_mem_u32(self, sp);
             sp += 4;
         }
     }
 
     // Restore status register
-    self.statusreg = self.read_mem_u8(sp);
+    self.statusreg = soc.read_mem_u8(sp);
     sp += 1;
 
     self.regs[@intFromEnum(regs.Abbr.sp)] = sp;
 }
 
 pub fn int_call(self: *soc.SoC) void {
-    if ((self.statusreg & self.FLAG_INT) == 0) return;
+    if ((self.statusreg & soc.FLAG_INT) == 0) return;
     if (!self.irq) return;
 
     // Compare IRQ priority if already in interrupt
@@ -55,8 +55,8 @@ pub fn int_call(self: *soc.SoC) void {
     // Save current registers
     save_callee_regs(self);
 
-    if (((self.statusreg & soc.SoC.FLAG_SV) >> 6) == 0b11) {
-        self.statusreg = (self.statusreg & ~soc.SoC.FLAG_SV) | 0b0100_0000;
+    if (((self.statusreg & soc.FLAG_SV) >> 6) == 0b11) {
+        self.statusreg = (self.statusreg & ~soc.FLAG_SV) | 0b0100_0000;
     }
 
     self.regs[@intFromEnum(regs.Abbr.lr)] = self.pc + 4;
@@ -79,12 +79,12 @@ pub fn int_return(self: *soc.SoC) void {
 }
 
 pub fn syscall(self: *soc.SoC) void {
-    const curr_priv = (self.statusreg & self.FLAG_SV) >> 6;
+    const curr_priv = (self.statusreg & soc.FLAG_SV) >> 6;
     if (curr_priv != 0b11) return;
 
     save_callee_regs(self);
 
-    self.statusreg = (self.statusreg & ~self.FLAG_SV) | 0b0100_0000;
+    self.statusreg = (self.statusreg & ~soc.FLAG_SV) | 0b0100_0000;
     self.regs[@intFromEnum(regs.Abbr.lr)] = self.pc + 4;
 
     const syscall_num: u8 = @truncate(self.regs[12]);
@@ -96,7 +96,7 @@ pub fn sysret(self: *soc.SoC) void {
     self.pc = self.regs[@intFromEnum(regs.Abbr.lr)];
 
     // Return to user mode
-    self.statusreg = (self.statusreg & ~soc.SoC.FLAG_SV) | 0b1100_0000;
+    self.statusreg = (self.statusreg & ~soc.FLAG_SV) | 0b1100_0000;
 }
 
 pub fn exec_hlt(self: *soc.SoC) void {
@@ -105,7 +105,7 @@ pub fn exec_hlt(self: *soc.SoC) void {
 
 pub fn execT(self: *soc.SoC, instr: u32) void {
     const opcode = instr & 0b1111111;
-    const imm: u8 = (instr >> 16) & 0b11111111;
+    const imm: u8 = @intCast((instr >> 16) & 0b11111111);
     const fn3 = (instr >> 7) & 0b111;
 
     if (opcode == 0b0000100) {
