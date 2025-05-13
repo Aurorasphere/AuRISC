@@ -18,21 +18,9 @@ pub const ALU_OP = enum {
     udiv, // Unsigned divide
     rem, // Remainder
     urem, // Unsigned remainder
-    // F-Extension: Floating point extensions
-    fadd, // Floating point addition
-    fsub, // Floating point subtraction
-    fmul, // Floating point multilication
-    fdiv, // Floating point division
-    fsqrt, // Floating point square root
-    fcmp, // Floating point compare
-    ftint, // Floating point to Signed integer
-    ftuint, // Floating point to Unsigned interger
-    fmvi, // Move Floating point bit to integer
-    imvf, // Move integer bit to floating point
 };
 
 const M_EXT = 0b001_0000;
-const F_EXT = 0b010_0000;
 
 pub fn decodeALUOpcode(fn3: u3, fn7: u7) ALU_OP {
     if (fn7 == 0b0000000) {
@@ -62,24 +50,8 @@ pub fn decodeALUOpcode(fn3: u3, fn7: u7) ALU_OP {
             0b101 => return .urem,
             else => return .invalid,
         }
-    } else if ((fn7 & F_EXT) != 0 and (fn7 & 0b0001111) == 0) {
-        switch (fn3) {
-            0b000 => return .fadd,
-            0b001 => return .fsub,
-            0b010 => return .fmul,
-            0b011 => return .fdiv,
-            0b100 => return .fsqrt,
-            0b101 => return .fcmp,
-            else => return .invalid,
-        }
-    } else if ((fn7 & F_EXT) != 0 and (fn7 & 0b0001111) == 1) {
-        switch (fn3) {
-            0b000 => return .ftint,
-            0b001 => return .ftuint,
-            0b010 => return .fmvi,
-            0b011 => return .imvf,
-            else => return .invalid,
-        }
+    } else {
+        return .invalid;
     }
 }
 

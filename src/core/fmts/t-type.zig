@@ -2,7 +2,7 @@ const soc = @import("../soc.zig");
 const regs = @import("../registers.zig");
 
 fn save_callee_regs(self: *soc.SoC) void {
-    var sp: u32 = self.regs[regs.Abbr.sp]; // sp
+    var sp: u32 = self.regs[@intFromEnum(regs.Abbr.sp)]; // sp
 
     sp -= 1;
     soc.write_mem_u8(self, sp, self.statusreg);
@@ -70,7 +70,7 @@ pub fn int_call(self: *soc.SoC) void {
 }
 
 pub fn int_return(self: *soc.SoC) void {
-    soc.restore_callee_regs(self);
+    .restore_callee_regs(self);
     self.pc = self.regs[@intFromEnum(regs.Abbr.lr)];
     self.statusreg |= soc.SoC.FLAG_INT;
 
