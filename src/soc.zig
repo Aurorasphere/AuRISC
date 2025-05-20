@@ -1,9 +1,17 @@
+pub var is_mmu_enabled: bool = false;
 pub var is_m_ext: bool = false;
 pub var is_f_ext: bool = false;
 pub var is_v_ext: bool = false;
 
 pub var SoC = struct {
     pub var registers: [32]u32 = .{0}; // Integer Registers
+    //
+    // =============== Special Registers ===============
+    const privilege = enum(u2) {
+        user = 0b00,
+        kernel = 0b10,
+        hardware = 0b11,
+    };
     pub var psr = struct { // Program Status Register
         pub var overflow: bool = false;
         pub var carry: bool = false;
@@ -21,16 +29,23 @@ pub var SoC = struct {
     pub var ivt: [256]u32 = .{0}; // Interrupt Vector Table
     pub var svt: [256]u32 = .{0}; // System Call Vector Table
 
+    // =============== Exception Handling ===============
     const exception = enum {
         DivisionByZero,
         PermissionFault,
+        InvalidSyscall,
         IllegalOpcode,
         IllegalALUOperation,
+        FPTypeMismatch,
     };
 
     // TODO: 예외처리 구현하기
-    fn exception_handler(excp: exception) noreturn {}
+    fn exception_handler(excp: exception) noreturn {
+        elr = pc;
+        enr = @intFromEnum(excp);
+    }
 
+    // =============== ALU ===============
     const aluop = enum {
         // Basic Integer ALU Operation
         add,
@@ -137,10 +152,14 @@ pub var SoC = struct {
             .xor_op => result = a ^ b,
             .lsl => result = a << @truncate(b),
             .lsr => result = a >> @truncate(b),
-            .asr => {},
-            .cmp => {},
+            .asr => result = @bitCast(@as(i32, @bitCast(a)) >> @truncate(b & 0x1F)),
+            .cmp => {
+                psr.gt = a > b;
+                psr.eq = a == b;
+                psr.lt = a < b;
+            },
             .mul => result = @bitCast(@as(i32, @intCast(a * b))),
-            .umul => result = @bitCast(a * b),
+            .umul => result = a * b,
             .div => {
                 if (b == 0) {
                     exception_handler(exception.DivisionByZero);
