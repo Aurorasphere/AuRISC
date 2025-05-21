@@ -269,13 +269,34 @@ pub var SoC = struct {
         if (opcode == 0b0000001 or 0b0010001) {
             const aluop_i = aluop_decoder(opcode, fn3, 0);
             registers[rd] = alu(registers[rm], imm_signext, aluop_i);
-        } else if (opcode == 0b0001001) { // Base Load instruction 
-            const vaddr = register 
-            const paddr 
+        } else if (opcode == 0b0001001) { // Base Load instruction
+            const vaddr = registers[rm] + @as(i32, @bitCast(imm_signext));
+            const paddr: usize = VA_translate(vaddr, false, false) catch |e| {
+                exception_handler(e);
+                unreachable;
+            };
             switch (fn3) {
                 0b000 => { // ldw, Load Word
-                    const
-                }
+                    if (paddr + 3 >= mem.MEM_SIZE) {
+                        exception_handler(exception.PageFault);
+                        unreachable;
+                    }
+                    registers[rd] = mem.memory[paddr] |
+                        (mem.memory[paddr + 1] << 8) |
+                        (mem.memory[paddr + 2] << 16) |
+                        (mem.memory[paddr + 3] << 24);
+                },
+                0b001 => { // ldh, Load Half
+                    if (paddr + 1 >= mem.MEM_SIZE) {
+                        exception_handler(exception.PageFault);
+                        unreachable;
+                    }
+                    registers[rd] = @intCast(mem.memory[paddr] |
+                        (mem.memory[paddr + 1] << 8));
+                },
+                0b010 => { // ldb, Load Byte
+                    registers[rd] = @intCast(mem.memory[paddr]);
+                },
             }
         }
     }
